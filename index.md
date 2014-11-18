@@ -3,6 +3,23 @@ title: IRATI project
 layout: default
 ---
 
+What is this?
+=============
+
+IRATI is a prototype of the Recursive InterNetwork Architecture
+([RINA](http://rina.tssg.org/)), targeted for GNU/Linux OS platforms
+with key components implemented directly in the kernel. For more
+information we redirect you to this
+[paper](http://dx.doi.org/10.1109/MNET.2014.6786609).
+
+Q & A
+=============
+
+[How to install the IRATI stack](install.html)
+
+Who are we?
+=============
+
 This source code was developed by members of the IRATI project
 ([www.irati.eu][]), funded by the European commission under the 7th
 Framework Programme grant number 317814.
@@ -33,5 +50,5 @@ The contributing members of the project are (alphabetical order):
   [@vmaffione]: https://github.com/vmaffione
 
 [View on GitHub](https://github.com/sandervrijders/stack) | 
-  [Download this project as a .zip file](https://github.com/sandervrijders/stack/zipball/master) | 
-  [Download this project as a tar.gz file](https://github.com/sandervrijders/stack/tarball/master)
+  [Download this project as a .zip file](https://github.com/irati/stack/zipball/master) | 
+  [Download this project as a tar.gz file](https://github.com/irati/stack/tarball/master)
