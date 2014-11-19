@@ -3,6 +3,19 @@ title: IRATI project
 layout: default
 ---
 
+  [bug report]: https://github.com/IRATI/stack/issues/new
+  [www.irati.eu]: http://www.irati.eu
+  [@PaddyWan]: https://github.com/PaddyWan
+  [@bernatgaston]: https://github.com/bernatgaston
+  [@dstaesse]: https://github.com/dstaesse
+  [@douwedb26]: https://github.com/douwedb26
+  [@edugrasa]: https://github.com/edugrasa
+  [@salvestrini]: https://github.com/salvestrini
+  [@lbergesio]: https://github.com/lbergesio
+  [@miqueltarzan]: https://github.com/miqueltarzan
+  [@sandervrijders]: https://github.com/sandervrijders
+  [@vmaffione]: https://github.com/vmaffione
+
 What is this?
 =============
 
@@ -37,18 +50,6 @@ The contributing members of the project are (alphabetical order):
 -   Sander Vrijders ([@sandervrijders][]) - Ghent University/iMinds, BE
 -   Vincenzo Maffione ([@vmaffione][]) - Nextworks s.r.l., IT
 
-  [www.irati.eu]: http://www.irati.eu
-  [@PaddyWan]: https://github.com/PaddyWan
-  [@bernatgaston]: https://github.com/bernatgaston
-  [@dstaesse]: https://github.com/dstaesse
-  [@douwedb26]: https://github.com/douwedb26
-  [@edugrasa]: https://github.com/edugrasa
-  [@salvestrini]: https://github.com/salvestrini
-  [@lbergesio]: https://github.com/lbergesio
-  [@miqueltarzan]: https://github.com/miqueltarzan
-  [@sandervrijders]: https://github.com/sandervrijders
-  [@vmaffione]: https://github.com/vmaffione
-
 License
 =============
 
@@ -72,7 +73,7 @@ Getting started
 ## How to install the IRATI stack ##
 
 The IRATI stack should run on all GNU/Linux OS platforms, if it does not, 
-please file a [bug report](https://github.com/IRATI/stack/issues/new).
+please file a [bug report][].
 
 ### How to install the stack in Debian/Linux 7.0 (wheezy) ###
 
@@ -124,7 +125,7 @@ To install both the kernel and userspace, you can use the
 install-from-scratch script. The script takes one parameter, the
 location where to install the user-space parts; if left empty, they
 will be installed in the root of the filesystem. Installation will
-take a while, since a linux kernel has to be compiled and the
+take a while, since a Linux kernel has to be compiled and the
 user-space parts have to be installed as well. After the stack has
 been installed, reboot the machine. You can use 'uname -a' to check if
 the new kernel was loaded, and you can browse to the folder where you
@@ -142,9 +143,34 @@ user-space parts.
 
 ## Running the IRATI stack ##
 
-First modprobe all the different modules you need. Create a VLAN
-device if you are using the shim-eth-vlan. Next, the IPC Manager has
-to be started in userspace, which needs some configuration info.
+First the appropriate kernel space components have to be modprobed. If
+you want to use a normal IPC process use:
+
+    modprobe normal-ipc
+
+Currently, there are 4 shim IPC processes available in the IRATI
+stack: 
+
+* The shim IPC process for 802.1Q (VLANs), which requires a virtual
+interface to be created on a VLAN before being inserted as a Linux
+kernel module. The VLAN id is a synonym for the DIF name.  
+* The shim IPC process for TCP/UDP.  
+* The shim dummy IPC process, which should be used only for debugging 
+purposes. It acts as a local loopback DIF. The normal IPC process 
+should also support this kind of behaviour, but it is currently not yet 
+supported.  
+* The shim IPC process for Hypervisors, which supports communication 
+between a virtual machine and its host.
+
+Each one can be loaded with the correct command:
+
+    modprobe shim-eth-vlan
+    modprobe shim-tcp-udp
+    modprobe shim-dummy
+    modprobe shim-hv
+
+Next, the IPC Manager has to be started in userspace, which needs some
+configuration info.
 
 ### Configuring the IPC Manager ###
 
