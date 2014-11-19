@@ -71,7 +71,74 @@ Getting started
 
 ## How to install the IRATI stack ##
 
-Install the kernel and then the userspace parts.
+The IRATI stack should run on all GNU/Linux OS platforms, if it does not, 
+please file a [bug report](https://github.com/IRATI/stack/issues/new).
+
+### How to install the stack in Debian/Linux 7.0 (wheezy) ###
+
+For the kernel parts, the following packages are required:
+    
+* kernel-package
+* libncurses5-dev
+
+For the user-space parts, the following packages are required:
+
+* autoconf
+* automake
+* libtool
+* pkg-config
+* git
+* g++
+* protobuf-compiler
+* libprotobuf-dev
+* openjdk-6-jdk
+* maven 
+* SWIG version 2.x, from http://swig.org
+  * version >2.0.8 required, version 2.0.12 is known to be working fine
+  * Depending on your intended setup, libpcre3-dev might be required. If
+    you don't want its support, just configure SWIG without it by
+    passing the --without-pcre option to its `configure' script.
+* libnl-genl-3-dev and libnl-3-dev:
+  * Add 'deb http://ftp.de.debian.org/debian jessie main' in
+     /etc/apt/sources.list
+  * Run 'apt-get update'
+  * Run 'apt-get install libnl-genl-3-dev libnl-3-dev'
+
+To use the shim-eth-vlan module you also need to install the 'vlan'
+package.
+
+To install the stack, start by running 'make menuconfig' in the linux
+directory. The IRATI parts can be found at:
+
+    +- Networking support
+    |  +- RINA support 
+
+To get a functioning stack, at least the 'Default Personality Support'
+has to be built as a module, and one or more IPC processes as well.
+If you are using the shim Ethernet IPC process, it is also required to
+build the RFC-826 ARP compliant implementation and the RINA ARP
+implementation. In order to fully be able to use the IRATI stack, 
+we advise to also build the normal IPC process.
+
+To install both the kernel and userspace, you can use the
+install-from-scratch script. The script takes one parameter, the
+location where to install the user-space parts; if left empty, they
+will be installed in the root of the filesystem. Installation will
+take a while, since a linux kernel has to be compiled and the
+user-space parts have to be installed as well. After the stack has
+been installed, reboot the machine. You can use 'uname -a' to check if
+the new kernel was loaded, and you can browse to the folder where you
+installed the user-space parts to verify they are there.
+
+Alternatively, you can install the kernel manually. To compile and
+install the kernel (and its headers), do the following:
+
+    make headers_install
+    make bzImage modules
+    make modules_install install
+
+Afterwards, run the install-user-from-scratch script to install the
+user-space parts.
 
 ## Running the IRATI stack ##
 
