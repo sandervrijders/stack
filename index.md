@@ -169,22 +169,28 @@ Each one can be loaded with the correct command:
     modprobe shim-dummy
     modprobe shim-hv
 
-Next, the IPC Manager has to be started in userspace, which needs some
-configuration info.
+Next, the IPC Manager has to be started in userspace, which is the
+local management agent. The IPCM needs some configuration info.
 
 ### Configuring the IPC Manager ###
 
-You can use the JSON file as input to configure the IPC Manager or the telnet console.
+There are two ways of configuring the IPC Manager, either by using a
+configuration file, which is written in JSON, or by telnetting to a
+console after the IPCM has started.
 
 #### The JSON config file ####
 
-Takes a lot of sections which tell the IPC Manager to create the IPC
-processes and with which config params.
+For an example of different JSON configuration files, you can take a
+look in tests/conf/
 
 #### The telnet console ####
 
 A different way is to use the telnet console, which allows the same
-flexibility in configuring.
+flexibility in configuring:
+
+    telnet localhost <port number specified in JSON config>
+
+Type 'help' to get an overview of all available commands.
 
 Now applications can be run that use the IPC API.
 
