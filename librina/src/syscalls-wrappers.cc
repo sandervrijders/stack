@@ -58,7 +58,7 @@
 #error No management_sdu_write syscall defined
 #endif
 
-#define RINA_PREFIX "syscalls"
+#define RINA_PREFIX "librina.syscalls"
 
 #include "librina/logs.h"
 #include "utils.h"
@@ -67,7 +67,7 @@
 
 #define DEBUG_SYSCALLS 1
 #if DEBUG_SYSCALLS
-#define DUMP_SYSCALL(X, Y) LOG_DBG("Gonna call syscall %s (%d)", X, Y);
+#define DUMP_SYSCALL(X, Y) LOG_DBG("Invoking %s (%d)", X, Y);
 #else
 #define DUMP_SYSCALL(X, Y) do { } while (0);
 #endif
@@ -200,13 +200,13 @@ int syscallAllocatePortId(unsigned short ipcProcessId,
         return result;
 }
 
-int syscallDeallocatePortId(int portId)
+int syscallDeallocatePortId(unsigned short ipcProcessId, int portId)
 {
         int result;
 
         DUMP_SYSCALL("SYS_deallocatePortId", SYS_deallocatePortId);
 
-        result = syscall(SYS_deallocatePortId, portId);
+        result = syscall(SYS_deallocatePortId, ipcProcessId, portId);
 
         if (result < 0) {
                 LOG_ERR("Syscall deallocate port id failed: %d",
