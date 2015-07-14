@@ -199,7 +199,6 @@ public:
                 floattype,
                 doubletype,
                 booltype,
-                bytestype
         };
 
         RIBObjectValue();
@@ -212,7 +211,6 @@ public:
         float float_value_;
         std::string string_value_;
         void * complex_value_;
-        SerializedObject bytes_value_;
 };
 
 /// Interface that provides the RIB Daemon API
@@ -357,8 +355,8 @@ public:
         /// @param src_ap_inst
         /// @param src_ap_name
         /// @param remote_id
-        virtual void openApplicationConnection(
-                        const rina::AuthPolicy &auth_policy, const std::string &dest_ae_inst,
+        virtual void openApplicationConnection(rina::CDAPMessage::AuthTypes auth_mech,
+                        const rina::AuthValue &auth_value, const std::string &dest_ae_inst,
                         const std::string &dest_ae_name, const std::string &dest_ap_inst,
                         const std::string &dest_ap_name, const std::string &src_ae_inst,
                         const std::string &src_ae_name, const std::string &src_ap_inst,
@@ -450,8 +448,8 @@ public:
         /// @param src_ap_name
         /// @param invoke_id
         /// @param remote_id
-        virtual void openApplicationConnectionResponse(
-                        const rina::AuthPolicy &auth_policy, const std::string &dest_ae_inst,
+        virtual void openApplicationConnectionResponse(rina::CDAPMessage::AuthTypes auth_mech,
+                        const rina::AuthValue &auth_value, const std::string &dest_ae_inst,
                         const std::string &dest_ae_name, const std::string &dest_ap_inst, const std::string &dest_ap_name,
                         int result, const std::string &result_reason, const std::string &src_ae_inst,
                         const std::string &src_ae_name, const std::string &src_ap_inst, const std::string &src_ap_name,
@@ -694,8 +692,8 @@ public:
         void sendMessages(const std::list<const CDAPMessage*>& cdapMessages,
                                 const IUpdateStrategy& updateStrategy);
 
-        void openApplicationConnection(
-                                const AuthPolicy &auth_policy, const std::string &dest_ae_inst,
+        void openApplicationConnection(CDAPMessage::AuthTypes auth_mech,
+                                const AuthValue &auth_value, const std::string &dest_ae_inst,
                                 const std::string &dest_ae_name, const std::string &dest_ap_inst,
                                 const std::string &dest_ap_name, const std::string &src_ae_inst,
                                 const std::string &src_ae_name, const std::string &src_ap_inst,
@@ -720,8 +718,8 @@ public:
         void remoteStopObject(const std::string& object_class, const std::string& object_name,
                                 RIBObjectValue& object_value, int scope, const RemoteProcessId& remote_id,
                                 ICDAPResponseMessageHandler * response_handler);
-        void openApplicationConnectionResponse(
-                                const rina::AuthPolicy &auth_policy, const std::string &dest_ae_inst,
+        void openApplicationConnectionResponse(rina::CDAPMessage::AuthTypes auth_mech,
+                                const rina::AuthValue &auth_value, const std::string &dest_ae_inst,
                                 const std::string &dest_ae_name, const std::string &dest_ap_inst, const std::string &dest_ap_name,
                                 int result, const std::string &result_reason, const std::string &src_ae_inst,
                                 const std::string &src_ae_name, const std::string &src_ap_inst, const std::string &src_ap_name,

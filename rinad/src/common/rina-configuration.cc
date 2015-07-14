@@ -226,6 +226,10 @@ std::string DIFTemplate::toString()
 		ss <<nsmConfiguration.toString();
 		ss << std::endl;
 
+		ss << "** SECURITY MANAGER ** "<<std::endl;
+		ss <<smConfiguration.toString();
+		ss << std::endl;
+
 		if (knownIPCProcessAddresses.size() > 0) {
 			ss << "** KNOWN IPCP ADDRESSES **" <<std::endl;
 			std::list<KnownIPCProcessAddress>::iterator it;
@@ -248,8 +252,6 @@ std::string DIFTemplate::toString()
 			ss << std::endl;
 		}
 
-		ss << "** SECURITY MANAGER **"<< std::endl;
-		ss << secManConfiguration.toString() <<std::endl;
 	}
 
 	if (configParameters.size() != 0) {

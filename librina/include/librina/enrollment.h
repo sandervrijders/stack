@@ -156,10 +156,6 @@ public:
 	/// @param apNamingInfo
 	/// @return
 	virtual bool isEnrolledTo(const std::string& applicationProcessName) = 0;
-
-	/// Callback used to signal the enrollment task that authentication completed
-	/// successfully (if success = true) or failed (if success = false)
-	virtual void authentication_completed(int port_id, bool success) = 0;
 };
 
 }

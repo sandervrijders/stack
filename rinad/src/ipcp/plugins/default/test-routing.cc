@@ -142,13 +142,14 @@ public:
 		std::list<rina::BaseRIBObject *> result;
 		return result;
 	}
-	void openApplicationConnection(
-			const rina::AuthPolicy &policy, const std::string &dest_ae_inst,
+	void openApplicationConnection(rina::CDAPMessage::AuthTypes auth_mech,
+			const rina::AuthValue &auth_value, const std::string &dest_ae_inst,
 			const std::string &dest_ae_name, const std::string &dest_ap_inst,
 			const std::string &dest_ap_name, const std::string &src_ae_inst,
 			const std::string &src_ae_name, const std::string &src_ap_inst,
 			const std::string &src_ap_name, const rina::RemoteProcessId& remote_id) {
-		(void) policy;
+		(void) auth_mech;
+		(void) auth_value;
 		(void) dest_ae_inst;
 		(void) dest_ae_name;
 		(void) dest_ap_inst;
@@ -222,13 +223,14 @@ public:
 		(void) remote_id;
 		(void) response_handler;
 	}
-	void openApplicationConnectionResponse(
-				const rina::AuthPolicy &policy, const std::string &dest_ae_inst,
+	void openApplicationConnectionResponse(rina::CDAPMessage::AuthTypes auth_mech,
+				const rina::AuthValue &auth_value, const std::string &dest_ae_inst,
 				const std::string &dest_ae_name, const std::string &dest_ap_inst, const std::string &dest_ap_name,
 				int result, const std::string &result_reason, const std::string &src_ae_inst,
 				const std::string &src_ae_name, const std::string &src_ap_inst, const std::string &src_ap_name,
 				int invoke_id, const rina::RemoteProcessId& remote_id) {
-		(void) policy;
+		(void) auth_mech;
+		(void) auth_value;
 		(void) dest_ae_inst;
 		(void) dest_ae_name;
 		(void) dest_ap_inst;

@@ -63,15 +63,10 @@ void PolicyParameter::set_value(const std::string& value) {
         value_ = value;
 }
 
-std::string PolicyParameter::toString()
-{
-	std::stringstream ss;
-	ss << "Name: " << name_ << "; Value: " << value_ << std::endl;
-	return ss.str();
-}
-
 // CLASS POLICY CONFIGURATION
 PolicyConfig::PolicyConfig() {
+        name_ = RINA_DEFAULT_POLICY_NAME;
+        version_ = RINA_DEFAULT_POLICY_VERSION;
 }
 
 PolicyConfig::PolicyConfig(const std::string& name,
@@ -119,7 +114,7 @@ void PolicyConfig::set_version(const std::string& version) {
         version_ = version;
 }
 
-std::string PolicyConfig::get_param_value_as_string(const std::string& name) const
+std::string PolicyConfig::get_param_value_as_string(const std::string& name)
 {
 	if (parameters_.size() == 0) {
 		throw Exception("No parameters");
@@ -135,7 +130,7 @@ std::string PolicyConfig::get_param_value_as_string(const std::string& name) con
 	throw Exception("Parameter not found");
 }
 
-long PolicyConfig::get_param_value_as_long(const std::string& name) const
+long PolicyConfig::get_param_value_as_long(const std::string& name)
 {
 	long result;
 	char *dummy;
@@ -149,12 +144,12 @@ long PolicyConfig::get_param_value_as_long(const std::string& name) const
 	return result;
 }
 
-int PolicyConfig::get_param_value_as_int(const std::string& name) const
+int PolicyConfig::get_param_value_as_int(const std::string& name)
 {
 	return get_param_value_as_long(name);
 }
 
-unsigned long PolicyConfig::get_param_value_as_ulong(const std::string& name) const
+unsigned long PolicyConfig::get_param_value_as_ulong(const std::string& name)
 {
 	unsigned long result;
 	char *dummy;
@@ -168,7 +163,7 @@ unsigned long PolicyConfig::get_param_value_as_ulong(const std::string& name) co
 	return result;
 }
 
-unsigned int PolicyConfig::get_param_value_as_uint(const std::string& name) const
+unsigned int PolicyConfig::get_param_value_as_uint(const std::string& name)
 {
 	return get_param_value_as_ulong(name);
 }
@@ -1142,6 +1137,29 @@ std::string NamespaceManagerConfiguration::toString()
 	return ss.str();
 }
 
+// CLASS SecurityManagerConfiguration
+SecurityManagerConfiguration::SecurityManagerConfiguration(){
+}
+
+const PolicyConfig&
+SecurityManagerConfiguration::get_policy_set() const {
+	return policy_set_;
+}
+
+void SecurityManagerConfiguration::set_policy_set(
+		const PolicyConfig& policy_set){
+	policy_set_ = policy_set;
+}
+
+std::string SecurityManagerConfiguration::toString()
+{
+	std::stringstream ss;
+	ss << "Selected SecurityManager Policy set. Name: " << policy_set_.name_ ;
+	ss << "; Version: " << policy_set_.version_ << std::endl;
+
+	return ss.str();
+}
+
 // CLASS RoutingConfiguration
 std::string RoutingConfiguration::toString()
 {
@@ -1294,42 +1312,6 @@ StaticIPCProcessAddress::StaticIPCProcessAddress() {
 //Class AddressPrefixConfiguration
 AddressPrefixConfiguration::AddressPrefixConfiguration() {
 	address_prefix_ = 0;
-}
-
-//Class AuthSDUProtectionProfile
-std::string AuthSDUProtectionProfile::to_string()
-{
-	std::stringstream ss;
-	ss << "Auth policy" << std::endl;
-	ss << authPolicy.toString() << std::endl;
-	ss << "Encrypt policy" << std::endl;
-	ss << encryptPolicy.toString() << std::endl;
-	ss << "Error check policy" << std::endl;
-	ss << crcPolicy.toString() <<std::endl;
-	ss << "TTL policy" << std::endl;
-	ss << ttlPolicy.toString() << std::endl;
-
-	return ss.str();
-}
-
-//Class SecurityManagerConfiguration
-std::string SecurityManagerConfiguration::toString()
-{
-	std::stringstream ss;
-	ss << "Security Manager policy set" << std::endl;
-	ss << policy_set_.toString() << std::endl;
-	ss << "Default auth-sdup profile" << std::endl;
-	ss << default_auth_profile.to_string() << std::endl;
-	if (specific_auth_profiles.size () > 0) {
-		ss << "Specific auth-sdup profiles" << std::endl;
-		for (std::map<std::string, AuthSDUProtectionProfile>::iterator it = specific_auth_profiles.begin();
-				it != specific_auth_profiles.end(); ++it) {
-			ss << "N-1 DIF name: " << it->first << "; Profile: " <<std::endl;
-			ss << it->second.to_string() << std::endl;
-		}
-	}
-
-	return ss.str();
 }
 
 // CLASS DIF CONFIGURATION

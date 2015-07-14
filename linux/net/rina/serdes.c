@@ -21,7 +21,6 @@
 
 #include <linux/export.h>
 #include <linux/types.h>
-#include <linux/crypto.h>
 
 #define RINA_PREFIX "serdes"
 
@@ -542,9 +541,7 @@ static int deserialize_ctrl_seq(const struct serdes * instance,
 
 static struct pdu_ser * pdu_serialize_gfp(gfp_t                       flags,
                                           const const struct serdes * instance,
-                                          struct pdu *                pdu,
-                                          struct dup_config_entry   * dup_conf,
-                                          struct crypto_blkcipher   * blkcipher)
+                                          struct pdu *                pdu)
 {
         struct pdu_ser *      tmp;
         struct dt_cons *      dt_cons;
@@ -553,14 +550,11 @@ static struct pdu_ser * pdu_serialize_gfp(gfp_t                       flags,
         const struct pci *    pci;
         size_t                size;
         ssize_t               buffer_size;
-        ssize_t               blk_size;
-        ssize_t               encrypted_size;
         ssize_t               pci_size;
         char *                data;
         pdu_type_t            pdu_type;
         seq_num_t             seq;
         struct buffer *       buf;
-        int i;
 
         if (!pdu_is_ok(pdu))
                 return NULL;
@@ -605,7 +599,6 @@ static struct pdu_ser * pdu_serialize_gfp(gfp_t                       flags,
         case PDU_TYPE_MGMT:
         case PDU_TYPE_DT:
                 size = pci_size + dt_cons->seq_num_length + buffer_size;
-
                 if (size <= 0)
                         return NULL;
 
@@ -724,72 +717,42 @@ static struct pdu_ser * pdu_serialize_gfp(gfp_t                       flags,
                 return NULL;
         }
 
-        /* FIXME: this should be moved to specific policy code */
-        if (dup_conf != NULL && dup_conf->ttl_policy != NULL){
-            if (pdu_ser_head_grow_gfp(flags, tmp, sizeof(u8))) {
-                    LOG_ERR("Failed to grow ser PDU");
-                    pdu_ser_destroy(tmp);
-                    return NULL;
-            }
-
-            if (!dup_ttl_set(tmp, pci_ttl(pci))) {
-                    LOG_ERR("Could not set TTL");
-                    pdu_ser_destroy(tmp);
-                    return NULL;
-            }
-
-            if (dup_ttl_is_expired(tmp)) {
-                    LOG_DBG("TTL is expired, dropping PDU");
-                    pdu_ser_destroy(tmp);
-                    return NULL;
-            }
+#ifdef CONFIG_RINA_IPCPS_TTL
+        if (pdu_ser_head_grow_gfp(flags, tmp, sizeof(u8))) {
+                LOG_ERR("Failed to grow ser PDU");
+                pdu_ser_destroy(tmp);
+                return NULL;
         }
 
-        /* FIXME: this should be moved to specific policy code */
-        if (blkcipher != NULL && dup_conf != NULL
-        		&& dup_conf->enable_encryption){
-                buf = pdu_ser_buffer(tmp);
-                blk_size = crypto_blkcipher_blocksize(blkcipher);
-                buffer_size = buffer_length(buf);
-                encrypted_size = (buffer_size/blk_size + 1) * blk_size;
-
-                if (pdu_ser_tail_grow_gfp(tmp, encrypted_size - buffer_size)){
-                    LOG_ERR("Failed to grow ser PDU");
-                    pdu_ser_destroy(tmp);
-                    return NULL;
-                }
-
-                /* PADDING */
-                data = buffer_data_rw(buf);
-                for (i=encrypted_size-1; i>buffer_size; i--){
-                    data[i] = encrypted_size - buffer_size;
-                }
-
-                /* Encrypt */
-                if (!dup_encrypt_data(tmp, blkcipher)) {
-                	LOG_ERR("Failed to encrypt PDU");
-                	pdu_ser_destroy(tmp);
-                	return NULL;
-                }
+        if (!dup_ttl_set(tmp, pci_ttl(pci))) {
+                LOG_ERR("Could not set TTL");
+                pdu_ser_destroy(tmp);
+                return NULL;
         }
 
-        /* FIXME: this should be moved to specific policy code */
-        if (dup_conf != NULL && dup_conf->error_check_policy != NULL){
-            /* Assuming CRC32 */
-            if (pdu_ser_head_grow_gfp(flags, tmp, sizeof(u32))) {
-                    LOG_ERR("Failed to grow ser PDU");
-                    pdu_ser_destroy(tmp);
-                    return NULL;
-            }
-
-            if (!dup_chksum_set(tmp)) {
-                    LOG_ERR("Failed to add CRC");
-                    pdu_ser_destroy(tmp);
-                    return NULL;
-            }
-
-            ASSERT(dup_chksum_is_ok(tmp));
+        if (dup_ttl_is_expired(tmp)) {
+                LOG_DBG("TTL is expired, dropping PDU");
+                pdu_ser_destroy(tmp);
+                return NULL;
         }
+#endif
+
+#ifdef CONFIG_RINA_IPCPS_CRC
+        /* Assuming CRC32 */
+        if (pdu_ser_head_grow_gfp(flags, tmp, sizeof(u32))) {
+                LOG_ERR("Failed to grow ser PDU");
+                pdu_ser_destroy(tmp);
+                return NULL;
+        }
+
+        if (!dup_chksum_set(tmp)) {
+                LOG_ERR("Failed to add CRC");
+                pdu_ser_destroy(tmp);
+                return NULL;
+        }
+
+        ASSERT(dup_chksum_is_ok(tmp));
+#endif
 
         pdu_destroy(pdu);
 
@@ -798,25 +761,21 @@ static struct pdu_ser * pdu_serialize_gfp(gfp_t                       flags,
 
 struct pdu_ser * pdu_serialize(const struct serdes * instance,
                                struct pdu *          pdu)
-{ return pdu_serialize_gfp(GFP_KERNEL, instance, pdu, NULL, NULL); }
+{ return pdu_serialize_gfp(GFP_KERNEL, instance, pdu); }
 EXPORT_SYMBOL(pdu_serialize);
 
 struct pdu_ser * pdu_serialize_ni(const struct serdes * instance,
-                                  struct pdu *          pdu,
-                                  struct dup_config_entry * dup_conf,
-                                  struct crypto_blkcipher * blkcipher)
-{ return pdu_serialize_gfp(GFP_ATOMIC, instance, pdu, dup_conf, blkcipher); }
+                                  struct pdu *          pdu)
+{ return pdu_serialize_gfp(GFP_ATOMIC, instance, pdu); }
 EXPORT_SYMBOL(pdu_serialize_ni);
 
 static struct pdu * pdu_deserialize_gfp(gfp_t                 flags,
                                         const struct serdes * instance,
-                                        struct pdu_ser *      pdu,
-                                        struct dup_config_entry * dup_conf,
-                                        struct crypto_blkcipher * blkcipher)
+                                        struct pdu_ser *      pdu)
 {
         struct pdu *          new_pdu;
         struct dt_cons *      dt_cons;
-        struct buffer *       tmp_buff;
+        const struct buffer * tmp_buff;
         struct buffer *       new_buff;
         struct pci *          new_pci;
         const uint8_t *       ptr;
@@ -824,8 +783,6 @@ static struct pdu * pdu_deserialize_gfp(gfp_t                 flags,
         ssize_t               pdu_len;
         seq_num_t             seq;
         ssize_t               ttl;
-        uint8_t               pad_len;
-        const char *          data;
 
         if (!instance)
                 return NULL;
@@ -833,38 +790,18 @@ static struct pdu * pdu_deserialize_gfp(gfp_t                 flags,
         if (!pdu_ser_is_ok(pdu))
                 return NULL;
 
-        /* FIXME: this should be moved to specific policy code */
-        if (dup_conf != NULL && dup_conf->error_check_policy != NULL){
-            if (!dup_chksum_is_ok(pdu)) {
-                    LOG_ERR("Bad CRC, PDU has been corrupted");
-                    return NULL;
-            }
-
-            /* Assuming CRC32 */
-            if (pdu_ser_head_shrink_gfp(flags, pdu, sizeof(u32))) {
-                    LOG_ERR("Failed to shrink ser PDU");
-                    return NULL;
-            }
+#ifdef CONFIG_RINA_IPCPS_CRC
+        if (!dup_chksum_is_ok(pdu)) {
+                LOG_ERR("Bad CRC, PDU has been corrupted");
+                return NULL;
         }
 
-        /* FIXME: this should be moved to specific policy code */
-        if (blkcipher != NULL && dup_conf != NULL &&
-        		dup_conf->enable_decryption){
-        	if (!dup_decrypt_data(pdu, blkcipher)) {
-        		LOG_ERR("Failed to decrypt PDU");
-        		return NULL;
-        	}
-
-                tmp_buff = pdu_ser_buffer(pdu);
-                data = buffer_data_ro(tmp_buff);
-                pad_len = data[buffer_length(tmp_buff)-1];
-
-                //remove padding
-                if (pdu_ser_tail_shrink_gfp(pdu, pad_len)){
-                        LOG_ERR("Failed to shrink ser PDU");
-                        return NULL;
-                }
+        /* Assuming CRC32 */
+        if (pdu_ser_head_shrink_gfp(flags, pdu, sizeof(u32))) {
+                LOG_ERR("Failed to shrink ser PDU");
+                return NULL;
         }
+#endif
 
         dt_cons = instance->dt_cons;
         ASSERT(dt_cons);
@@ -890,30 +827,29 @@ static struct pdu * pdu_deserialize_gfp(gfp_t                 flags,
 
         ttl = 0;
 
-        /* FIXME: this should be moved to specific policy code */
-        if (dup_conf != NULL && dup_conf->ttl_policy != NULL){
-                ttl = dup_ttl_decrement(pdu);
-                if (ttl < 0) {
-                        LOG_ERR("Could not decrement TTL");
-                        pci_destroy(new_pci);
-                        pdu_destroy(new_pdu);
-                        return NULL;
-                }
-
-                if (pci_ttl_set(new_pci, ttl)) {
-                        LOG_ERR("Could not set TTL");
-                        pci_destroy(new_pci);
-                        pdu_destroy(new_pdu);
-                        return NULL;
-                }
-
-                if (pdu_ser_head_shrink_gfp(flags, pdu, sizeof(u8))) {
-                        LOG_ERR("Failed to shrink ser PDU");
-                        pci_destroy(new_pci);
-                        pdu_destroy(new_pdu);
-                        return NULL;
-                }
+#ifdef CONFIG_RINA_IPCPS_TTL
+        ttl = dup_ttl_decrement(pdu);
+        if (ttl < 0) {
+                LOG_ERR("Could not decrement TTL");
+                pci_destroy(new_pci);
+                pdu_destroy(new_pdu);
+                return NULL;
         }
+
+        if (pci_ttl_set(new_pci, ttl)) {
+                LOG_ERR("Could not set TTL");
+                pci_destroy(new_pci);
+                pdu_destroy(new_pdu);
+                return NULL;
+        }
+
+        if (pdu_ser_head_shrink_gfp(flags, pdu, sizeof(u8))) {
+                LOG_ERR("Failed to shrink ser PDU");
+                pci_destroy(new_pci);
+                pdu_destroy(new_pdu);
+                return NULL;
+        }
+#endif
 
         ptr = (const uint8_t *) buffer_data_ro(tmp_buff);
         ASSERT(ptr);
@@ -943,7 +879,6 @@ static struct pdu * pdu_deserialize_gfp(gfp_t                 flags,
                 new_buff = buffer_create_from_gfp(flags,
                                                   ptr + offset,
                                                   pdu_len - offset);
-
                 if (!new_buff) {
                         LOG_ERR("Could not create new_buff");
                         pci_destroy(new_pci);
@@ -1058,12 +993,10 @@ static struct pdu * pdu_deserialize_gfp(gfp_t                 flags,
 
 struct pdu * pdu_deserialize(const struct serdes * instance,
                              struct pdu_ser *      pdu)
-{ return pdu_deserialize_gfp(GFP_KERNEL, instance, pdu, NULL, NULL); }
+{ return pdu_deserialize_gfp(GFP_KERNEL, instance, pdu); }
 EXPORT_SYMBOL(pdu_deserialize);
 
 struct pdu * pdu_deserialize_ni(const struct serdes * instance,
-                                struct pdu_ser *      pdu,
-                                struct dup_config_entry * dup_conf,
-                                struct crypto_blkcipher * blkcipher)
-{ return pdu_deserialize_gfp(GFP_ATOMIC, instance, pdu, dup_conf, blkcipher); }
+                                struct pdu_ser *      pdu)
+{ return pdu_deserialize_gfp(GFP_ATOMIC, instance, pdu); }
 EXPORT_SYMBOL(pdu_deserialize_ni);

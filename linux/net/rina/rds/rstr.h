@@ -35,6 +35,5 @@ int        string_len(const string_t * s);
 char *     rkstrdup_gfp(const char * s, gfp_t flags);
 char *     rkstrdup(const char * s);
 char *     rkstrdup_ni(const char * s);
-char *     get_zero_length_string(void);
 
 #endif

@@ -8,17 +8,12 @@
                         "Version" : "1"
                 },
                 {
-                        "Name": "PSOC_authentication-none",
+                        "Name": "authentication-none",
                         "Component": "security-manager",
                         "Version" : "1"
                 },
                 {
-                        "Name": "PSOC_authentication-password",
-                        "Component": "security-manager",
-                        "Version" : "1"
-                },
-	        {
-                        "Name": "PSOC_authentication-ssh2",
+                        "Name": "authentication-password",
                         "Component": "security-manager",
                         "Version" : "1"
                 },
