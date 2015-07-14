@@ -1381,12 +1381,13 @@ struct rmt * rmt_create(struct ipcp_instance *  parent,
         if (!tmp)
                 return NULL;
 
-        tmp->address   = address_bad();
-        tmp->parent    = parent;
-        tmp->kfa       = kfa;
-        tmp->efcpc     = efcpc;
+        tmp->address = address_bad();
+        tmp->parent  = parent;
+        tmp->kfa     = kfa;
+        tmp->efcpc   = efcpc;
         tmp->pff     = pff_create();
         if (!tmp->pff)
+		goto fail;
 
         tmp->n1_ports = n1pmap_create();
         if (!tmp->n1_ports || pff_cache_init(&tmp->cache))
