@@ -27,6 +27,10 @@
 #include <map>
 #include <vector>
 
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <dirent.h>
+
 #include <librina/common.h>
 #include <librina/ipc-manager.h>
 #include <librina/plugin-info.h>
@@ -77,7 +81,7 @@ namespace rinad {
 Singleton<IPCManager_> IPCManager;
 
 IPCManager_::IPCManager_() : req_to_stop(false), io_thread(NULL),
-		dif_template_manager(NULL){
+		dif_template_manager(NULL) {
 
 }
 
@@ -105,12 +109,17 @@ void IPCManager_::init(const std::string& loglevel, std::string& config_file)
 			config.local.libraryPath.c_str());
 		LOG_DBG("       log folder: %s", config.local.logPath.c_str());
 
+                // Load the plugins catalog
+		catalog.import();
+		catalog.print();
+
 		//Initialize the I/O thread
 		io_thread = new rina::Thread(&io_thread_attrs,
-							io_loop_trampoline,
-							NULL);
+                                             io_loop_trampoline,
+                                             NULL);
+                io_thread->start();
 
-		//Initialize DIF Templates Manager (with its monitor thread)
+		// Initialize DIF Templates Manager (with its monitor thread)
 		stringstream ss;
 		ss << config_file.substr(0, config_file.rfind("/"));
 		dif_template_manager = new DIFTemplateManager(ss.str());
@@ -391,6 +400,26 @@ IPCManager_::assign_to_dif(Addon* callee, Promise* promise,
 	IPCPTransState* trans;
 
 	try {
+		if (is_any_ipcp_assigned_to_dif(dif_name)) {
+			ss << "There is already an IPCP assigned to DIF "
+				<< dif_name.toString()
+				<< " in this system.";
+			FLUSH_LOG(ERR, ss);
+			throw rina::AssignToDIFException();
+		}
+
+		ipcp = lookup_ipcp_by_id(ipcp_id, false);
+		if (ipcp->get_type() == rina::NORMAL_IPC_PROCESS) {
+			// Load all the plugins required from by template, but
+			// first release the ipcp lock, to avoid lock-ups.
+			ipcp->rwlock.unlock();
+
+			catalog.load_by_template(callee, ipcp_id, dif_template);
+
+		} else {
+			ipcp->rwlock.unlock();
+		}
+
 		ipcp = lookup_ipcp_by_id(ipcp_id, true);
 		if(!ipcp){
 			ss << "Invalid IPCP id "<< ipcp_id;
@@ -400,14 +429,6 @@ IPCManager_::assign_to_dif(Addon* callee, Promise* promise,
 
 		//Auto release the write lock
 		rina::WriteScopedLock writelock(ipcp->rwlock, false);
-
-		if (is_any_ipcp_assigned_to_dif(dif_name)) {
-			ss << "There is already an IPCP assigned to DIF "
-				<< dif_name.toString()
-				<< " in this system.";
-			FLUSH_LOG(ERR, ss);
-			throw rina::AssignToDIFException();
-		}
 
 		// Fill in the DIFConfiguration object.
 		if (ipcp->get_type() == rina::NORMAL_IPC_PROCESS) {
@@ -1147,6 +1168,51 @@ IPCManager_::select_policy_set(Addon* callee, Promise* promise,
 	return IPCM_PENDING;
 }
 
+// Returns IPCM_SUCCESS if a kernel plugin was successfully loaded/unloaded,
+// IPCM_FAILURE otherwise
+ipcm_res_t
+IPCManager_::plugin_load_kernel(const std::string& plugin_name,
+				bool load)
+{
+	ostringstream ss;
+	ipcm_res_t result = IPCM_FAILURE;
+	pid_t pid;
+
+	pid = fork();
+	if (pid < 0) {
+		// parent, fork() failed
+		ss << "Kernel plugin (un)loading: fork() failed";
+		FLUSH_LOG(ERR, ss);
+		result = IPCM_FAILURE;
+
+	} else if (pid == 0) {
+		// child
+		if (load) {
+			execlp("modprobe", "modprobe", plugin_name.c_str(),
+			       NULL);
+
+		} else {
+			execlp("modprobe", "modprobe", "-r",
+			       plugin_name.c_str(), NULL);
+		}
+
+		ss << "Kernel plugin (un)loading: exec() failed";
+		FLUSH_LOG(ERR, ss);
+
+		exit(EXIT_FAILURE);
+
+	} else {
+		// parent, fork() successful
+		int child_status = 0;
+
+		waitpid(pid, &child_status, 0);
+
+		result = child_status ? IPCM_FAILURE : IPCM_SUCCESS;
+	}
+
+	return result;
+}
+
 ipcm_res_t
 IPCManager_::plugin_load(Addon* callee, Promise* promise,
 		const unsigned short ipcp_id,
@@ -1157,6 +1223,13 @@ IPCManager_::plugin_load(Addon* callee, Promise* promise,
 	IPCPTransState* trans;
 
 	try {
+		//First try to see if its a kernel module
+		if (plugin_load_kernel(plugin_name, load) == IPCM_SUCCESS) {
+			promise->ret = IPCM_SUCCESS;
+
+			return IPCM_SUCCESS;
+		}
+
 		ipcp = lookup_ipcp_by_id(ipcp_id);
 
 		if(!ipcp){
@@ -1708,6 +1781,269 @@ void IPCManager_::io_loop(){
 	//TODO: probably move this to a private method if it starts to grow
 	LOG_DBG("Stopping I/O loop...");
 
+}
+
+CatalogPsInfo::CatalogPsInfo(const rina::PsInfo& psinfo,
+			     map<string, CatalogPlugin>::iterator plit)
+				: PsInfo(psinfo)
+{
+	plugin = plit;
+	loaded = plugin->second.loaded;
+}
+
+static bool endswith(const string& s, const string& suffix)
+{
+	if (s.size() < suffix.size()) {
+		return false;
+	}
+
+	return suffix == s.substr(s.size() - suffix.size(), suffix.size());
+}
+
+#define MANIFEST_SUFFIX ".manifest"
+
+void Catalog::import()
+{
+	const rinad::RINAConfiguration& config = IPCManager->getConfig();
+
+	for (list<string>::const_iterator lit =
+		config.local.pluginsPaths.begin();
+			lit != config.local.pluginsPaths.end(); lit++) {
+		DIR *dir = opendir(lit->c_str());
+		struct dirent *ent;
+
+		if (dir == NULL) {
+			LOG_WARN("Failed to open plugins directory: '%s'",
+				 lit->c_str());
+			continue;
+		}
+
+		while ((ent = readdir(dir)) != NULL) {
+			string plugin_name(ent->d_name);
+
+			if (!endswith(plugin_name, MANIFEST_SUFFIX)) {
+				continue;
+			}
+
+			LOG_INFO("Catalog: found manifest %s",
+					plugin_name.c_str());
+
+			// Remove the MANIFEST_SUFFIX suffix
+			plugin_name = plugin_name.substr(0,
+						plugin_name.size() -
+						string(MANIFEST_SUFFIX).size());
+
+			add_plugin(plugin_name, *lit);
+		}
+
+		closedir(dir);
+	}
+}
+
+void Catalog::add_plugin(const string& plugin_name, const string& plugin_path)
+{
+	map<string, CatalogPlugin>::iterator plit;
+	list<rina::PsInfo> new_policy_sets;
+	rina::WriteScopedLock wlock(rwlock);
+	int ret;
+
+	ret = rina::plugin_get_info(plugin_name, plugin_path, new_policy_sets);
+	if (ret) {
+		LOG_WARN("Failed to load manifest file for plugin '%s'",
+			 plugin_name.c_str());
+		return;
+	}
+
+	if (plugins.count(plugin_name)) {
+		// Plugin already in the catalog
+		return;
+	}
+
+	plugins[plugin_name] = CatalogPlugin(plugin_name, plugin_path, false);
+	plit = plugins.find(plugin_name);
+
+	for (list<rina::PsInfo>::const_iterator ps = new_policy_sets.begin();
+					ps != new_policy_sets.end(); ps++) {
+		map<string, CatalogPsInfo>& cpsets =
+					policy_sets[ps->app_entity];
+		if (cpsets.count(ps->name)) {
+			// Policy set already in the catalog for the
+			// specified component;
+			continue;
+		}
+
+		cpsets[ps->name] = CatalogPsInfo(*ps, plit);
+	}
+}
+
+// Helper function used by load_by_template()
+void Catalog::psinfo_from_psconfig(list< rina::PsInfo >& psinfo_list,
+				   const string& component,
+				   const rina::PolicyConfig& pconfig)
+{
+	if (pconfig.name_ != string()) {
+		psinfo_list.push_back(rina::PsInfo(pconfig.name_,
+						   component,
+						   pconfig.version_));
+	}
+}
+
+int Catalog::load_by_template(Addon *addon, unsigned int ipcp_id,
+			      const rinad::DIFTemplate *t)
+{
+	list< rina::PsInfo > required_policy_sets;
+
+	// Collect into a list all the policy sets specified
+	// by the template
+	psinfo_from_psconfig(required_policy_sets, "rmt",
+			     t->rmtConfiguration.policy_set_);
+
+	psinfo_from_psconfig(required_policy_sets, "pff",
+			     t->rmtConfiguration.pft_conf_.policy_set_);
+
+	psinfo_from_psconfig(required_policy_sets, "enrollment-task",
+			     t->etConfiguration.policy_set_);
+
+	psinfo_from_psconfig(required_policy_sets, "security-manager",
+			     t->secManConfiguration.policy_set_);
+
+	psinfo_from_psconfig(required_policy_sets, "flow-allocator",
+			     t->faConfiguration.policy_set_);
+
+	psinfo_from_psconfig(required_policy_sets, "namespace-manager",
+			     t->nsmConfiguration.policy_set_);
+
+	psinfo_from_psconfig(required_policy_sets, "resource-allocator",
+			     t->raConfiguration.pduftg_conf_.policy_set_);
+
+	psinfo_from_psconfig(required_policy_sets, "routing",
+			     t->routingConfiguration.policy_set_);
+
+	// Load all the policy sets in the list
+	for (list<rina::PsInfo>::iterator i=required_policy_sets.begin();
+			i != required_policy_sets.end(); i++) {
+		int ret = load_policy_set(addon, ipcp_id, *i);
+
+		if (ret) {
+			LOG_WARN("Failed to load policy-set %s/%s",
+				  i->app_entity.c_str(), i->name.c_str());
+		}
+	}
+
+	return 0;
+}
+
+int Catalog::load_policy_set(Addon *addon, unsigned int ipcp_id,
+			     const rina::PsInfo& psinfo)
+{
+	Promise promise;
+	string plugin_name;
+
+	{
+		// Perform a first lookup (under read lock) to see if we
+		// can find a suitable plugin to load
+		rina::ReadScopedLock wlock(rwlock);
+
+		if (policy_sets.count(psinfo.app_entity) == 0) {
+			LOG_WARN("Catalog does not contain any policy-set "
+				 "for component %s",
+				 psinfo.app_entity.c_str());
+			return -1;
+		}
+
+		map<string, CatalogPsInfo>& cmap = policy_sets[psinfo.app_entity];
+
+		if (cmap.count(psinfo.name) == 0) {
+			LOG_WARN("Catalog does not contain a policy-set "
+				 "called %s for component %s",
+				 psinfo.name.c_str(),
+				 psinfo.app_entity.c_str());
+			return -1;
+		}
+
+		plugin_name = cmap[psinfo.name].plugin->second.name;
+	}
+
+	// Perform the plugin loading - a blocking and possibly
+	// asynchronous operation - out of the catalog lock
+	if (IPCManager->plugin_load(addon, &promise, ipcp_id,
+			plugin_name, true) == IPCM_FAILURE ||
+				promise.wait() != IPCM_SUCCESS) {
+		LOG_WARN("Error occurred while loading plugin '%s'",
+			 plugin_name.c_str());
+		return -1;
+	}
+
+	LOG_INFO("Plugin '%s' successfully loaded",
+			plugin_name.c_str());
+
+	{
+		// Lookup again (the plugin or policy set may have disappeared
+		// in the meanwhile) under the write lock, and update the
+		// catalog data structure.
+		rina::WriteScopedLock wlock(rwlock);
+
+		if (policy_sets.count(psinfo.app_entity) == 0) {
+			LOG_WARN("Policy-sets for component %s disappeared "
+				 "while loading the plugin",
+				 psinfo.app_entity.c_str());
+			return -1;
+		}
+
+		map<string, CatalogPsInfo>& cmap = policy_sets[psinfo.app_entity];
+
+		if (cmap.count(psinfo.name) == 0) {
+			LOG_WARN("Policy-set %s disappeared while "
+				 "loading the plugin",
+				 psinfo.name.c_str());
+			return -1;
+		}
+
+		cmap[psinfo.name].plugin->second.loaded = true;
+
+		for (map<string, CatalogPsInfo>::iterator psit = cmap.begin();
+				psit != cmap.end(); psit++) {
+			psit->second.loaded = true;
+		}
+	}
+
+	return 0;
+}
+
+string Catalog::toString() const
+{
+	map<string, map< string, CatalogPsInfo > >::const_iterator mit;
+	map<string, CatalogPsInfo>::const_iterator cmit;
+	rina::ReadScopedLock rlock(const_cast<Catalog *>(this)->rwlock);
+	stringstream ss;
+
+	ss << "Catalog of plugins and policy sets:" << endl;
+
+	for (mit = policy_sets.begin(); mit != policy_sets.end(); mit++) {
+		for (cmit = mit->second.begin();
+				cmit != mit->second.end(); cmit++) {
+			const CatalogPsInfo& cps = cmit->second;
+
+			ss << "    ===================================="
+			   << endl << "    ps name: " << cps.name
+			   << endl << "    ps component: " << cps.app_entity
+			   << endl << "    ps version: " << cps.version
+			   << endl << "    ps loaded: " << cps.loaded
+			   << endl << "    plugin: " << cps.plugin->second.path
+			   << "/" << cps.plugin->second.name
+			   << " [loaded = " << cps.plugin->second.loaded
+			   << "]" << endl;
+		}
+	}
+
+	ss << "      ====================================" << endl;
+
+	return ss.str();
+}
+
+void Catalog::print() const
+{
+	LOG_INFO("%s", toString().c_str());
 }
 
 } //rinad namespace

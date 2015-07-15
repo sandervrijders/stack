@@ -29,7 +29,7 @@
                 },
                 {
                         "Name": "default",
-                        "Component": "resource-allocator/pduft-generator",
+                        "Component": "resource-allocator",
                         "Version" : "1"
                 },
                 {

@@ -239,6 +239,66 @@ public:
 	virtual ~SyscallTransState(){};
 };
 
+// Data structure that represent a plugin in the catalog
+struct CatalogPlugin {
+	// The name of the plugin
+	std::string name;
+
+	// The path of the plugin
+	std::string path;
+
+	// Is the plugin already loaded ?
+	bool loaded;
+
+	CatalogPlugin() { }
+	CatalogPlugin(const std::string& n, const std::string& p, bool l)
+			: name(n), path(p), loaded(l) { }
+};
+
+struct CatalogPsInfo: public rina::PsInfo {
+	// Back-reference to the plugin that published this
+	// policy-set
+	std::map<std::string, CatalogPlugin>::iterator plugin;
+
+	// Is the policy-set alread loaded (i.e. is the associated
+	// plugin already loaded ?
+	bool loaded;
+
+	CatalogPsInfo() : PsInfo() { }
+	CatalogPsInfo(const rina::PsInfo& psinfo,
+		      std::map<std::string, CatalogPlugin>::iterator plit);
+};
+
+class Catalog {
+public:
+	Catalog() { }
+
+	void import();
+	void add_plugin(const std::string& plugin_name,
+		        const std::string& plugin_path);
+	int load_by_template(Addon *addon, unsigned int ipcp_id,
+			     const rinad::DIFTemplate *dif_template);
+
+	int load_policy_set(Addon *addon, unsigned int ipcp_id,
+			    const rina::PsInfo& psinfo);
+
+	void print() const;
+	std::string toString() const;
+
+private:
+	void psinfo_from_psconfig(std::list< rina::PsInfo >& psinfo_list,
+				  const std::string& component,
+				  const rina::PolicyConfig& pconfig);
+
+	std::map<std::string,
+		 std::map<std::string, CatalogPsInfo>
+		> policy_sets;
+
+	std::map<std::string, CatalogPlugin> plugins;
+
+	rina::ReadWriteLockable rwlock;
+};
+
 //
 // @brief The IPCManager class is in charge of managing the IPC processes
 // life-cycle.
@@ -687,6 +747,18 @@ protected:
 	void ipc_process_select_policy_set_response_handler(
 					rina::SelectPolicySetResponseEvent *e);
 
+	//
+	// Load kernel space policy plugin
+	//
+	// @param plugin_name Name of the kernel module containing the
+	//		      plugin to be loaded
+	// @param load        True if the plugin is to be loaded,
+	//                    false if the plugin is to be unloaded.
+	// @ret IPCM_SUCCESS when load/unload is successful, otherwise
+	//	IPCM_FAILURE
+	ipcm_res_t plugin_load_kernel(const std::string& plugin_name,
+				      bool load);
+
 	/*
 	* Get the transaction state. Template parameter is the type of the
 	* specific state required for the type of transaction
@@ -804,6 +876,10 @@ public:
 
 	//The DIF template manager
 	DIFTemplateManager * dif_template_manager;
+
+	//Catalog of policies
+	Catalog catalog;
+
 private:
 	//Singleton
 	IPCManager_();
