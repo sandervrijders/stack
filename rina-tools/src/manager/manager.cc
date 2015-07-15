@@ -22,6 +22,7 @@
 #include <iostream>
 
 #include <cassert>
+#include <thread>
 #define RINA_PREFIX     "manager"
 #include <librina/logs.h>
 #include <librina/cdap_v2.h>
@@ -36,6 +37,60 @@ using namespace rinad;
 
 const std::string Manager::mad_name = "mad";
 const std::string Manager::mad_instance = "1";
+
+Application::Application(const string& dif_name_, const string& app_name_,
+				const string& app_instance_)
+		: 	dif_name(dif_name_),
+			app_name(app_name_),
+			app_instance(app_instance_) {
+}
+
+void Application::applicationRegister() {
+	ApplicationRegistrationInformation ari;
+	RegisterApplicationResponseEvent *resp;
+	unsigned int seqnum;
+	IPCEvent *event;
+
+	ari.ipcProcessId = 0;  // This is an application, not an IPC process
+	ari.appName = ApplicationProcessNamingInformation(app_name,
+								app_instance);
+	if (dif_name == string()) {
+		ari.applicationRegistrationType =
+				rina::APPLICATION_REGISTRATION_ANY_DIF;
+	} else {
+		ari.applicationRegistrationType =
+				rina::APPLICATION_REGISTRATION_SINGLE_DIF;
+		ari.difName = ApplicationProcessNamingInformation(
+				dif_name, string());
+	}
+
+	// Request the registration
+	seqnum = ipcManager->requestApplicationRegistration(ari);
+
+	// Wait for the response to come
+	for (;;) {
+		event = ipcEventProducer->eventWait();
+		if (event
+				&& event->eventType
+						== REGISTER_APPLICATION_RESPONSE_EVENT
+				&& event->sequenceNumber == seqnum) {
+			break;
+		}
+	}
+
+	resp = dynamic_cast<RegisterApplicationResponseEvent*>(event);
+
+	// Update librina state
+	if (resp->result == 0) {
+		ipcManager->commitPendingRegistration(seqnum, resp->DIFName);
+	} else {
+		ipcManager->withdrawPendingRegistration(seqnum);
+		throw ApplicationRegistrationException(
+				"Failed to register application");
+	}
+}
+
+const uint Application::max_buffer_size = 1 << 18;
 
 ConnectionCallback::ConnectionCallback(
 		rina::cdap::CDAPProviderInterface **prov) {
@@ -79,50 +134,120 @@ void ConnectionCallback::remote_read_result(
 	std::cout << "QueryRIB:" << std::endl << query_rib << std::endl;
 }
 
-ManagerWorker::ManagerWorker(rina::ThreadAttributes * threadAttributes,
-		     	     int port,
-		     	     unsigned int max_size,
-		     	     Server * serv) : ServerWorker(threadAttributes, serv)
-{
-	port_id = port;
-	max_sdu_size = max_size;
-	cdap_prov = 0;
+Manager::Manager(const std::string& dif_name, const std::string& apn,
+			const std::string& api)
+		: Application(dif_name, apn, api) {
+	(void) client_app_reg_;
+	cdap_prov_ = 0;
 }
 
-int ManagerWorker::internal_run()
-{
-	operate(port_id);
-	return 0;
+Manager::~Manager() {
 }
 
-void ManagerWorker::operate(int port_id)
+void Manager::run()
 {
-        ConnectionCallback callback(&cdap_prov);
+        applicationRegister();
+
+        for (;;) {
+                IPCEvent* event = ipcEventProducer->eventWait();
+                rina::FlowInformation flow;
+                unsigned int port_id;
+                DeallocateFlowResponseEvent *resp = 0;
+
+                if (!event)
+                        return;
+
+                switch (event->eventType) {
+
+                        case REGISTER_APPLICATION_RESPONSE_EVENT:
+                                ipcManager->commitPendingRegistration(
+                                                event->sequenceNumber,
+                                                dynamic_cast<RegisterApplicationResponseEvent*>(event)
+                                                                ->DIFName);
+                                break;
+
+                        case UNREGISTER_APPLICATION_RESPONSE_EVENT:
+                                ipcManager->appUnregistrationResult(
+                                                event->sequenceNumber,
+                                                dynamic_cast<UnregisterApplicationResponseEvent*>(event)
+                                                                ->result == 0);
+                                break;
+
+                        case FLOW_ALLOCATION_REQUESTED_EVENT:
+                                flow =
+                                                ipcManager->allocateFlowResponse(
+                                                                *dynamic_cast<FlowRequestEvent*>(event),
+                                                                0, true);
+                                LOG_INFO("New flow allocated [port-id = %d]",
+                                         flow.portId);
+                                startWorker(flow);
+                                break;
+
+                        case FLOW_DEALLOCATED_EVENT:
+                                port_id =
+                                                dynamic_cast<FlowDeallocatedEvent*>(event)
+                                                                ->portId;
+                                ipcManager->flowDeallocated(port_id);
+                                LOG_INFO("Flow torn down remotely [port-id = %d]",
+                                         port_id);
+                                break;
+
+                        case DEALLOCATE_FLOW_RESPONSE_EVENT:
+                                LOG_INFO("Destroying the flow after time-out");
+                                resp =
+                                                dynamic_cast<DeallocateFlowResponseEvent*>(event);
+                                port_id = resp->portId;
+
+                                ipcManager->flowDeallocationResult(
+                                                port_id, resp->result == 0);
+                                break;
+
+                        default:
+                                LOG_INFO("Server got new event of type %d",
+                                         event->eventType);
+                                break;
+                }
+        }
+}
+
+void Manager::startWorker(rina::FlowInformation flow)
+{
+        void (Manager::*server_function)(rina::FlowInformation flow);
+
+	server_function = &Manager::operate;
+
+	thread t(server_function, this, flow);
+	t.detach();
+}
+
+void Manager::operate(rina::FlowInformation flow)
+{
+        ConnectionCallback callback(&cdap_prov_);
         std::cout << "cdap_prov created" << std::endl;
         cdap::CDAPProviderFactory::init(2000);
-        cdap_prov = cdap::CDAPProviderFactory::create(false, &callback);
+        cdap_prov_ = cdap::CDAPProviderFactory::create(false, &callback);
         // CACEP
-        cacep(port_id);
+        cacep(flow);
         // CREATE IPCP
-        createIPCP(port_id);
+        createIPCP(flow);
         // QUERY RIB
-        queryRIB(port_id);
+        queryRIB(flow);
         // FINISH
-        cdap::CDAPProviderFactory::destroy(port_id);
-        delete cdap_prov;
+        cdap::CDAPProviderFactory::destroy(flow.portId);
+        delete cdap_prov_;
 }
 
-void ManagerWorker::cacep(int port_id)
+void Manager::cacep(rina::FlowInformation flow)
 {
         char buffer[max_sdu_size_in_bytes];
-        int bytes_read = ipcManager->readSDU(port_id, buffer, max_sdu_size_in_bytes);
+        int bytes_read = ipcManager->readSDU(flow.portId, buffer, max_sdu_size_in_bytes);
         cdap_rib::SerializedObject message;
         message.message_ = buffer;
         message.size_ = bytes_read;
-        cdap_prov->process_message(message, port_id);
+        cdap_prov_->process_message(message, flow.portId);
 }
 
-void ManagerWorker::createIPCP(int port_id)
+void Manager::createIPCP(rina::FlowInformation flow)
 {
         char buffer[max_sdu_size_in_bytes];
 
@@ -149,19 +274,18 @@ void ManagerWorker::createIPCP(int port_id)
         filt.filter_ = 0;
         filt.scope_ = 0;
 
-        cdap_prov->remote_create(port_id, obj, flags, filt);
+        cdap_prov_->remote_create(flow.portId, obj, flags, filt);
         std::cout << "create IPC request CDAP message sent" << std::endl;
 
-        int bytes_read = ipcManager->readSDU(port_id,
-        				     buffer,
-        				     max_sdu_size_in_bytes);
+        int bytes_read = ipcManager->readSDU(flow.portId, buffer,
+							max_sdu_size_in_bytes);
         cdap_rib::SerializedObject message;
         message.message_ = buffer;
         message.size_ = bytes_read;
-        cdap_prov->process_message(message, port_id);
+        cdap_prov_->process_message(message, flow.portId);
 }
 
-void ManagerWorker::queryRIB(int port_id)
+void Manager::queryRIB(rina::FlowInformation flow)
 {
         char buffer[max_sdu_size_in_bytes];
 
@@ -178,32 +302,13 @@ void ManagerWorker::queryRIB(int port_id)
 	filt.filter_ = 0;
 	filt.scope_ = 0;
 
-        cdap_prov->remote_read(port_id, obj, flags, filt);
+        cdap_prov_->remote_read(flow.portId, obj, flags, filt);
         std::cout << "Read RIBDaemon request CDAP message sent" << std::endl;
 
-        int bytes_read = ipcManager->readSDU(port_id,
-        				     buffer,
-        				     max_sdu_size_in_bytes);
+        int bytes_read = ipcManager->readSDU(flow.portId, buffer,
+							max_sdu_size_in_bytes);
         cdap_rib::SerializedObject message;
         message.message_ = buffer;
         message.size_ = bytes_read;
-        cdap_prov->process_message(message, port_id);
-}
-
-Manager::Manager(const std::string& dif_name, const std::string& apn,
-			const std::string& api)
-		: Server(dif_name, apn, api)
-{
-}
-
-ServerWorker * Manager::internal_start_worker(int port_id)
-{
-	ThreadAttributes threadAttributes;
-	ManagerWorker * worker = new ManagerWorker(&threadAttributes,
-						   port_id,
-						   max_sdu_size_in_bytes,
-						   this);
-	worker->start();
-        worker->detach();
-        return worker;
+        cdap_prov_->process_message(message, flow.portId);
 }

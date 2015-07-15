@@ -118,8 +118,6 @@ public:
 	void processApplicationUnregistrationRequestEvent(
 				const rina::ApplicationUnregistrationRequestEvent& event);
 	unsigned int getAdressByname(const rina::ApplicationProcessNamingInformation& name);
-	rina::ApplicationRegistrationInformation
-		get_reg_app_info(const rina::ApplicationProcessNamingInformation name);
 
 private:
 	/// The directory forwarding table

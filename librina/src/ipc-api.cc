@@ -9,12 +9,12 @@
 // modify it under the terms of the GNU Lesser General Public
 // License as published by the Free Software Foundation; either
 // version 2.1 of the License, or (at your option) any later version.
-// 
+//
 // This library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 // Lesser General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU Lesser General Public
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
@@ -22,7 +22,6 @@
 //
 
 #include <cstring>
-#include <errno.h>
 #include <stdexcept>
 
 #define RINA_PREFIX "librina.ipc-api"
@@ -682,71 +681,26 @@ int IPCManager::readSDU(int portId, void * sdu, int maxBytes)
 	return maxBytes;
 #else
 	int result = syscallReadSDU(portId, sdu, maxBytes);
-
-	if (result == -EINVAL){
-		throw InvalidArgumentsException();
-	}
-
-	if (result == -EBADF) {
-		throw UnknownFlowException();
-	}
-
-	if (result == -ESHUTDOWN) {
-		throw FlowNotAllocatedException();
-	}
-
-	if (result == -EIO) {
+	if (result < 0){
 		throw ReadSDUException();
-	}
-
-	if (result == -EAGAIN) {
-		return 0;
-	}
-
-	if (result < 0) {
-		throw IPCException("Unknown error");
 	}
 
 	return result;
 #endif
 }
 
-int IPCManager::writeSDU(int portId, void * sdu, int size)
+void IPCManager::writeSDU(int portId, void * sdu, int size)
 {
 #if STUB_API
 	/* Do nothing. */
 	(void)portId;
         (void)sdu;
-
-        return size;
+        (void)size;
 #else
 	int result = syscallWriteSDU(portId, sdu, size);
-
-	if (result == -EINVAL){
-		throw InvalidArgumentsException();
-	}
-
-	if (result == -EBADF) {
-		throw UnknownFlowException();
-	}
-
-	if (result == -ESHUTDOWN) {
-		throw FlowNotAllocatedException();
-	}
-
-	if (result == -EIO) {
+	if (result < 0){
 		throw WriteSDUException();
 	}
-
-	if (result == -EAGAIN) {
-		return 0;
-	}
-
-	if (result < 0) {
-		throw IPCException("Unknown error");
-	}
-
-	return result;
 #endif
 }
 

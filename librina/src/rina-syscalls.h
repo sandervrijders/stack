@@ -38,9 +38,7 @@ namespace rina {
          * @return 0 if everything was ok, negative number indicating error
          *         otherwise
          */
-        int syscallWriteSDU(int portId,
-        		    void * sdu,
-        		    int size);
+        int syscallWriteSDU(int portId, void * sdu, int size);
 
         /**
          * Wrapper of the readSDU system call
@@ -51,9 +49,7 @@ namespace rina {
          * @return number of bytes read if successful, a negative number 
          *         indicating an error otherwise
          */
-        int syscallReadSDU(int portId,
-        		   void * sdu,
-        		   int maxBytes);
+        int syscallReadSDU(int portId, void * sdu, int maxBytes);
 
         /**
          * Wrapper of the managementSDUWrite system call
@@ -113,8 +109,7 @@ namespace rina {
          * indicating error otherwise
          */
         int syscallAllocatePortId(unsigned short ipcProcessId,
-                        	  const ApplicationProcessNamingInformation & applicationName,
-                        	  bool blocking);
+                        const ApplicationProcessNamingInformation & applicationName);
 
         /**
          * Wrappert of the deallocate port-is system call

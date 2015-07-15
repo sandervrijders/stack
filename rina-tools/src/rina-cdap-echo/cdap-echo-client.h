@@ -23,6 +23,7 @@
 #define CLIENT_HPP
 
 #include <string>
+#include <chrono>
 #include <librina/librina.h>
 #include <librina/cdap_v2.h>
 
@@ -69,6 +70,5 @@ class Client : public Application, public rina::cdap::CDAPCallbackInterface
         rina::cdap_rib::con_handle_t con_;
         unsigned long count_;
         bool keep_running_;
-        rina::Sleep sleep_wrapper;
 };
 #endif//CLIENT_HPP

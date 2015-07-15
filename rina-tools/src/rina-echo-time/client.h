@@ -18,11 +18,12 @@
 // Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 //
 
-#ifndef ET_CLIENT_HPP
-#define ET_CLIENT_HPP
+#ifndef CLIENT_HPP
+#define CLIENT_HPP
 
 #include <string>
-#include <librina/concurrency.h>
+#include <chrono>
+#include <librina/librina.h>
 
 #include "application.h"
 
@@ -39,17 +40,15 @@ public:
                unsigned long count,
                bool  registration,
                unsigned int size,
-               int wait,
+               unsigned int wait,
                int g,
-               int dw,
-               unsigned int lw);
+               int dw);
                void run();
 protected:
         int createFlow();
         void pingFlow(int port_id);
         void perfFlow(int port_id);
         void destroyFlow(int port_id);
-        int readSDU(int portId, void * sdu, int maxBytes, unsigned int timout);
 
 private:
         std::string test_type;
@@ -60,10 +59,8 @@ private:
         unsigned long echo_times; // -1 is infinite
         bool client_app_reg;
         unsigned int data_size;
-        int wait;
+        unsigned int wait;
         int gap;
         int dealloc_wait;
-        unsigned int lost_wait;
-        rina::Sleep sleep_wrapper;
 };
-#endif//ET_CLIENT_HPP
+#endif//CLIENT_HPP

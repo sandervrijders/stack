@@ -756,8 +756,6 @@ static int parse_flow_spec(struct nlattr * fspec_attr,
         attr_policy[FSPEC_ATTR_PEAK_SDU_BWITH_DURATION].len  = 4;
         attr_policy[FSPEC_ATTR_UNDETECTED_BER].type          = NLA_U32;
         attr_policy[FSPEC_ATTR_UNDETECTED_BER].len           = 4;
-        attr_policy[FSPEC_ATTR_BLOCKING].type         	     = NLA_FLAG;
-        attr_policy[FSPEC_ATTR_BLOCKING].len          	     = 0;
 
         if (nla_parse_nested(attrs,
                              FSPEC_ATTR_MAX,
@@ -807,9 +805,6 @@ static int parse_flow_spec(struct nlattr * fspec_attr,
         if (attrs[FSPEC_ATTR_MAX_SDU_SIZE])
                 fspec_struct->max_sdu_size =
                         nla_get_u32(attrs[FSPEC_ATTR_MAX_SDU_SIZE]);
-
-        fspec_struct->blocking =
-                nla_get_flag(attrs[FSPEC_ATTR_BLOCKING]);
 
         return 0;
 }
@@ -1385,7 +1380,7 @@ static int parse_pff_config(struct nlattr *     pff_config_attr,
 
  parse_fail:
         LOG_ERR(BUILD_STRERROR_BY_MTYPE("pff config attributes"));
-
+	return -1;
 }
 
 static int parse_rmt_config(struct nlattr *     rmt_config_attr,
@@ -2210,8 +2205,6 @@ rnl_parse_ipcm_reg_app_req_msg(struct genl_info * info,
                                                 "APPLICATION_REQUEST"));
                 return -1;
         }
-
-        msg_attrs->blocking  = info->attrs[IRAR_ATTR_BLOCKING];
         return 0;
 }
 
@@ -2635,10 +2628,6 @@ static int format_flow_spec(const struct flow_spec * fspec,
                 if (nla_put_u32(msg,
                                 FSPEC_ATTR_UNDETECTED_BER,
                                 fspec->undetected_bit_error_rate))
-                        return -1;
-        if (fspec->blocking)
-                if (nla_put_flag(msg,
-                                 FSPEC_ATTR_BLOCKING))
                         return -1;
 
         return 0;

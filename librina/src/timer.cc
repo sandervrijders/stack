@@ -108,10 +108,8 @@ void TaskScheduler::runTasks() {
 			try {
 				ThreadAttributes threadAttributes;
 				threadAttributes.setDettached();
-				Thread *t = new Thread(&doWorkTask,
-						       (void *) (*iter_list),
-						       &threadAttributes);
-				t->start();
+				Thread *t = new Thread(&threadAttributes, &doWorkTask,
+						(void *) (*iter_list));
 				delete t;
 				t = 0;
 			} catch (Exception &e) {
@@ -164,8 +162,7 @@ Timer::Timer() {
 	continue_ = true;
 	continue_lock_.unlock();
 	task_scheduler = new TaskScheduler();
-	thread_ = new Thread(&doWorkTimer, (void *) this, &threadAttributes);
-	thread_->start();
+	thread_ = new Thread(&threadAttributes, &doWorkTimer, (void *) this);
 	LOG_DBG("Timer with ID %d started", thread_);
 }
 Timer::~Timer() {

@@ -158,11 +158,6 @@ public:
 	 */
 	unsigned int maxSDUsize;
 
-	/**
-	 * True if the flow is blocking, false otherwise
-	 */
-	bool blocking;
-
 	FlowSpecification();
 	bool operator==(const FlowSpecification &other) const;
 	bool operator!=(const FlowSpecification &other) const;
@@ -415,9 +410,6 @@ public:
 
 	/** Optional DIF name where the application wants to register */
 	ApplicationProcessNamingInformation difName;
-
-	/** True if the flows allocated to this AE will be blocking, false otherwise*/
-	bool blocking;
 
 	ApplicationRegistrationInformation();
 	ApplicationRegistrationInformation(

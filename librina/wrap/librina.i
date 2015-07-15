@@ -3,12 +3,12 @@
  * modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation; either
  * version 2.1 of the License, or (at your option) any later version.
- * 
+ *
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * Lesser General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
@@ -27,14 +27,14 @@
 #endif
 
 /**
- * void * typemaps. 
+ * void * typemaps.
  * These are input typemaps for mapping a Java byte[] array to a C void array.
  * Note that as a Java array is used and thus passeed by reference, the C
  * routine can return data to Java via the parameter.
  *
  * Example usage wrapping:
  *   void foo(void *array);
- *  
+ *
  * Java usage:
  *   byte b[] = new byte[20];
  *   modulename.foo(b);
@@ -43,11 +43,11 @@
 %typemap(jtype)  void * "byte[]"
 %typemap(jstype) void * "byte[]"
 %typemap(in)     void * {
-        $1 = (void *) JCALL2(GetByteArrayElements, jenv, $input, 0); 
+        $1 = (void *) JCALL2(GetByteArrayElements, jenv, $input, 0);
 }
 
 %typemap(argout) void * {
-        JCALL3(ReleaseByteArrayElements, jenv, $input, (jbyte *) $1, 0); 
+        JCALL3(ReleaseByteArrayElements, jenv, $input, (jbyte *) $1, 0);
 }
 
 %typemap(javain) void * "$javainput"
@@ -84,12 +84,6 @@
 }
 %typemap(throws, throws="eu.irati.librina.UnknownFlowException") rina::UnknownFlowException {
   jclass excep = jenv->FindClass("eu/irati/librina/UnknownFlowException");
-  if (excep)
-    jenv->ThrowNew(excep, $1.what());
-  return $null;
-}
-%typemap(throws, throws="eu.irati.librina.InvalidArgumentsException") rina::InvalidArgumentsException {
-  jclass excep = jenv->FindClass("eu/irati/librina/InvalidArgumentsException");
   if (excep)
     jenv->ThrowNew(excep, $1.what());
   return $null;
@@ -239,7 +233,7 @@
             jmethodID mid = jenv->GetMethodID(clazz, "<init>", "(JZ)V");
             if (mid) {
                 jlong cptr = 0;
-                *(rina::ApplicationRegistrationRequestEvent **)&cptr = appRegReqEvent; 
+                *(rina::ApplicationRegistrationRequestEvent **)&cptr = appRegReqEvent;
                 $result = jenv->NewObject(clazz, mid, cptr, false);
             }
         }
@@ -250,7 +244,7 @@
             jmethodID mid = jenv->GetMethodID(clazz, "<init>", "(JZ)V");
             if (mid) {
                 jlong cptr = 0;
-                *(rina::ApplicationUnregistrationRequestEvent **)&cptr = appUnregReqEvent; 
+                *(rina::ApplicationUnregistrationRequestEvent **)&cptr = appUnregReqEvent;
                 $result = jenv->NewObject(clazz, mid, cptr, false);
             }
         }
@@ -261,7 +255,7 @@
             jmethodID mid = jenv->GetMethodID(clazz, "<init>", "(JZ)V");
             if (mid) {
                 jlong cptr = 0;
-                *(rina::FlowRequestEvent **)&cptr = flowReqEvent; 
+                *(rina::FlowRequestEvent **)&cptr = flowReqEvent;
                 $result = jenv->NewObject(clazz, mid, cptr, false);
             }
         }
@@ -272,7 +266,7 @@
             jmethodID mid = jenv->GetMethodID(clazz, "<init>", "(JZ)V");
             if (mid) {
                 jlong cptr = 0;
-                *(rina::FlowDeallocateRequestEvent **)&cptr = flowReqEvent; 
+                *(rina::FlowDeallocateRequestEvent **)&cptr = flowReqEvent;
                 $result = jenv->NewObject(clazz, mid, cptr, false);
             }
         }
@@ -283,7 +277,7 @@
             jmethodID mid = jenv->GetMethodID(clazz, "<init>", "(JZ)V");
             if (mid) {
                 jlong cptr = 0;
-                *(rina::FlowDeallocatedEvent **)&cptr = flowReqEvent; 
+                *(rina::FlowDeallocatedEvent **)&cptr = flowReqEvent;
                 $result = jenv->NewObject(clazz, mid, cptr, false);
             }
         }
@@ -294,7 +288,7 @@
             jmethodID mid = jenv->GetMethodID(clazz, "<init>", "(JZ)V");
             if (mid) {
                 jlong cptr = 0;
-                *(rina::RegisterApplicationResponseEvent **)&cptr = flowReqEvent; 
+                *(rina::RegisterApplicationResponseEvent **)&cptr = flowReqEvent;
                 $result = jenv->NewObject(clazz, mid, cptr, false);
             }
         }
@@ -305,7 +299,7 @@
             jmethodID mid = jenv->GetMethodID(clazz, "<init>", "(JZ)V");
             if (mid) {
                 jlong cptr = 0;
-                *(rina::UnregisterApplicationResponseEvent **)&cptr = flowReqEvent; 
+                *(rina::UnregisterApplicationResponseEvent **)&cptr = flowReqEvent;
                 $result = jenv->NewObject(clazz, mid, cptr, false);
             }
         }
@@ -316,7 +310,7 @@
             jmethodID mid = jenv->GetMethodID(clazz, "<init>", "(JZ)V");
             if (mid) {
                 jlong cptr = 0;
-                *(rina::AllocateFlowResponseEvent **)&cptr = flowReqEvent; 
+                *(rina::AllocateFlowResponseEvent **)&cptr = flowReqEvent;
                 $result = jenv->NewObject(clazz, mid, cptr, false);
             }
         }
@@ -327,7 +321,7 @@
             jmethodID mid = jenv->GetMethodID(clazz, "<init>", "(JZ)V");
             if (mid) {
                 jlong cptr = 0;
-                *(rina::AllocateFlowRequestResultEvent **)&cptr = flowReqEvent; 
+                *(rina::AllocateFlowRequestResultEvent **)&cptr = flowReqEvent;
                 $result = jenv->NewObject(clazz, mid, cptr, false);
             }
         }
@@ -338,7 +332,7 @@
             jmethodID mid = jenv->GetMethodID(clazz, "<init>", "(JZ)V");
             if (mid) {
                 jlong cptr = 0;
-                *(rina::DeallocateFlowResponseEvent **)&cptr = flowReqEvent; 
+                *(rina::DeallocateFlowResponseEvent **)&cptr = flowReqEvent;
                 $result = jenv->NewObject(clazz, mid, cptr, false);
             }
         }
@@ -349,12 +343,12 @@
             jmethodID mid = jenv->GetMethodID(clazz, "<init>", "(JZ)V");
             if (mid) {
                 jlong cptr = 0;
-                *(rina::GetDIFPropertiesResponseEvent **)&cptr = flowReqEvent; 
+                *(rina::GetDIFPropertiesResponseEvent **)&cptr = flowReqEvent;
                 $result = jenv->NewObject(clazz, mid, cptr, false);
             }
         }
     }
-} 
+}
 %enddef
 
 DOWNCAST_IPC_EVENT_CONSUMER(eventWait);
@@ -375,10 +369,10 @@ DOWNCAST_IPC_EVENT_CONSUMER(eventTimedWait);
 %rename(equals) rina::ApplicationProcessNamingInformation::operator==(const ApplicationProcessNamingInformation &other) const;
 %rename(assign) rina::ApplicationProcessNamingInformation::operator=(const ApplicationProcessNamingInformation &other);
 %rename(assign) rina::SerializedObject::operator=(const SerializedObject &other);
-%rename(isLessThanOrEquals) rina::ApplicationProcessNamingInformation::operator<=(const ApplicationProcessNamingInformation &other) const;   
+%rename(isLessThanOrEquals) rina::ApplicationProcessNamingInformation::operator<=(const ApplicationProcessNamingInformation &other) const;
 %rename(isLessThan) rina::ApplicationProcessNamingInformation::operator<(const ApplicationProcessNamingInformation &other) const;
-%rename(isMoreThanOrEquals) rina::ApplicationProcessNamingInformation::operator>=(const ApplicationProcessNamingInformation &other) const;   
-%rename(isMoreThan) rina::ApplicationProcessNamingInformation::operator>(const ApplicationProcessNamingInformation &other) const;  
+%rename(isMoreThanOrEquals) rina::ApplicationProcessNamingInformation::operator>=(const ApplicationProcessNamingInformation &other) const;
+%rename(isMoreThan) rina::ApplicationProcessNamingInformation::operator>(const ApplicationProcessNamingInformation &other) const;
 %rename(equals) rina::FlowSpecification::operator==(const FlowSpecification &other) const;
 %rename(differs) rina::FlowSpecification::operator!=(const FlowSpecification &other) const;
 %rename(equals) rina::Thread::operator==(const Thread &other) const;
@@ -434,7 +428,7 @@ DOWNCAST_IPC_EVENT_CONSUMER(eventTimedWait);
     }
   private:
     collection_t::const_iterator it;
-    const collection_t& collection;    
+    const collection_t& collection;
   };
 %}
 %typemap(javainterfaces) CPPCOLLECTION<CPPTYPE> "Iterable<JTYPE>"

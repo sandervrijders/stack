@@ -51,8 +51,7 @@ struct personality_ops {
 
         int (* allocate_port)(struct personality_data * data,
                               ipc_process_id_t          pid,
-                              struct name *             name,
-                              bool			blocking);
+                              struct name *             name);
         int (* deallocate_port)(struct personality_data * data,
                                 ipc_process_id_t          ipc_id,
                                 port_id_t                 pid);

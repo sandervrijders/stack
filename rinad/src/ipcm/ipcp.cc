@@ -226,8 +226,7 @@ void IPCMIPCProcess::disconnectFromNeighbor(
 void IPCMIPCProcess::registerApplication(
 		const rina::ApplicationProcessNamingInformation& applicationName,
 		unsigned short regIpcProcessId,
-		unsigned int opaque,
-		bool blocking)
+		unsigned int opaque)
 {
 	if (state_ != IPCM_IPCP_ASSIGNED_TO_DIF)
 		throw rina::IpcmRegisterApplicationException(
@@ -235,7 +234,7 @@ void IPCMIPCProcess::registerApplication(
 
 	try {
 		proxy_->registerApplication(applicationName, regIpcProcessId,
-				dif_name_, opaque, blocking);
+				dif_name_, opaque);
 	}catch (rina::Exception &e) {
 		throw e;
 	}

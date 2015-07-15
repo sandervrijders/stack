@@ -191,14 +191,14 @@ SYSCALL_DEFINE3(sdu_read,
 
         LOG_DBG("Personality returned value %zd", retval);
 
-        if (retval < 0) {
+        if (retval) {
                 SYSCALL_DUMP_EXIT;
-                return retval;
+                return -EFAULT;
         }
 
         if (!sdu_is_ok(tmp)) {
                 SYSCALL_DUMP_EXIT;
-                return -EIO;
+                return -EFAULT;
         }
 
         /* NOTE: We don't handle partial copies */
@@ -209,7 +209,7 @@ SYSCALL_DEFINE3(sdu_read,
                         "User space buffer size: %zd",
                         buffer_length(tmp->buffer), size);
                 sdu_destroy(tmp);
-                return -EIO;
+                return -EFAULT;
         }
 
         if (copy_to_user(buffer,
@@ -219,7 +219,7 @@ SYSCALL_DEFINE3(sdu_read,
 
                 LOG_ERR("Error copying data to user-space");
                 sdu_destroy(tmp);
-                return -EIO;
+                return -EFAULT;
         }
 
         retsize = buffer_length(tmp->buffer);
@@ -250,7 +250,7 @@ SYSCALL_DEFINE3(sdu_write,
 
         if (!buffer || !size) {
                 SYSCALL_DUMP_EXIT;
-                return -EINVAL;
+                return -EFAULT;
         }
 
         LOG_DBG("Syscall write SDU (size = %zd, port-id = %d)", size, id);
@@ -258,7 +258,7 @@ SYSCALL_DEFINE3(sdu_write,
         tmp_buffer = buffer_create(size);
         if (!tmp_buffer) {
                 SYSCALL_DUMP_EXIT;
-                return -ENOMEM;
+                return -EFAULT;
         }
 
         ASSERT(buffer_is_ok(tmp_buffer));
@@ -268,7 +268,7 @@ SYSCALL_DEFINE3(sdu_write,
         if (copy_from_user(buffer_data_rw(tmp_buffer), buffer, size)) {
                 SYSCALL_DUMP_EXIT;
                 buffer_destroy(tmp_buffer);
-                return -EIO;
+                return -EFAULT;
         }
 
         /* NOTE: sdu_create takes the ownership of the buffer */
@@ -276,16 +276,16 @@ SYSCALL_DEFINE3(sdu_write,
         if (!sdu) {
                 SYSCALL_DUMP_EXIT;
                 buffer_destroy(tmp_buffer);
-                return -ENOMEM;
+                return -EFAULT;
         }
         ASSERT(sdu_is_ok(sdu));
 
         /* Passing ownership to the internal layers */
         CALL_DEFAULT_PERSONALITY(retval, sdu_write, id, sdu);
-        if (retval < 0) {
+        if (retval) {
                 SYSCALL_DUMP_EXIT;
                 /* NOTE: Do not destroy SDU, ownership isn't our anymore */
-                return retval;
+                return -EFAULT;
         }
 
         SYSCALL_DUMP_EXIT;
@@ -294,17 +294,15 @@ SYSCALL_DEFINE3(sdu_write,
 #endif
 }
 
-SYSCALL_DEFINE4(allocate_port,
+SYSCALL_DEFINE3(allocate_port,
                 ipc_process_id_t, id,
                 const char __user *, process_name,
-                const char __user *, process_instance,
-                bool, blocking)
+                const char __user *, process_instance)
 {
 #ifndef CONFIG_RINA
         (void) id;
         (void) process_name;
         (void) process_instance;
-        (void) blocking;
 
         return -ENOSYS;
 #else
@@ -329,7 +327,7 @@ SYSCALL_DEFINE4(allocate_port,
                 return -EFAULT;
         }
 
-        CALL_DEFAULT_PERSONALITY(retval, allocate_port, id, tname, blocking);
+        CALL_DEFAULT_PERSONALITY(retval, allocate_port, id, tname);
 
         SYSCALL_DUMP_EXIT;
 

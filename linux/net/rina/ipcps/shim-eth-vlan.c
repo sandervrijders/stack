@@ -106,9 +106,6 @@ struct ipcp_instance_data {
         /* The IPC Process using the shim-eth-vlan */
         struct name *          app_name;
 
-        /* True if the registered app wants blocking flows, false otherwise */
-        bool		       blocking;
-
         /* Stores the state of flows indexed by port_id */
         spinlock_t             lock;
         struct list_head       flows;
@@ -630,8 +627,7 @@ static int eth_vlan_flow_deallocate(struct ipcp_instance_data * data,
 }
 
 static int eth_vlan_application_register(struct ipcp_instance_data * data,
-                                         const struct name *         name,
-                                         bool			     blocking)
+                                         const struct name *         name)
 {
         struct gpa * pa;
         struct gha * ha;
@@ -646,7 +642,6 @@ static int eth_vlan_application_register(struct ipcp_instance_data * data,
                 return -1;
         }
 
-        data->blocking = blocking;
         data->app_name = name_dup(name);
         if (!data->app_name) {
                 char * tmp = name_tostring(name);
@@ -879,7 +874,7 @@ static int eth_vlan_rcv_worker(void * o)
 
         if (!user_ipcp->ops->ipcp_name(user_ipcp->data)) {
                 LOG_DBG("This flow goes for an app");
-                if (kfa_flow_create(data->kfa, flow->port_id, data->blocking, ipcp)) {
+                if (kfa_flow_create(data->kfa, flow->port_id, ipcp)) {
                         LOG_ERR("Could not create flow in KFA");
                         kfa_port_id_release(data->kfa, flow->port_id);
                         if (flow_destroy(data, flow))

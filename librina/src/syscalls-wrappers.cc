@@ -8,19 +8,18 @@
 // modify it under the terms of the GNU Lesser General Public
 // License as published by the Free Software Foundation; either
 // version 2.1 of the License, or (at your option) any later version.
-// 
+//
 // This library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 // Lesser General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU Lesser General Public
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 // MA  02110-1301  USA
 //
 
-#include <errno.h>
 #include <unistd.h>
 #include <sys/syscall.h>
 
@@ -83,8 +82,7 @@ int syscallWriteSDU(int portId, void * sdu, int size)
 
         result = syscall(SYS_writeSDU, portId, sdu, size);
         if (result < 0) {
-        	LOG_WARN("Syscall write SDU failed: %d", errno);
-                result = -errno;
+                LOG_ERR("Syscall write SDU failed: %d", result);
         }
 
         return result;
@@ -98,8 +96,7 @@ int syscallReadSDU(int portId, void * sdu, int maxBytes)
 
         result = syscall(SYS_readSDU, portId, sdu, maxBytes);
         if (result < 0) {
-                LOG_DBG("Syscall read SDU failed: %d", errno);
-                result = -errno;
+                LOG_ERR("Syscall read SDU failed: %d", result);
         }
 
         return result;
@@ -118,8 +115,7 @@ int syscallWriteManagementSDU(unsigned short ipcProcessId,
         result = syscall(SYS_writeManagementSDU, ipcProcessId, address,
                          portId,sdu, size);
         if (result < 0) {
-        	LOG_DBG("Syscall write SDU failed: %d", errno);
-                result = -errno;
+                LOG_ERR("Syscall write SDU failed: %d", result);
         }
 
         return result;
@@ -140,8 +136,7 @@ int syscallReadManagementSDU(int    ipcProcessId,
                          portId,
                          maxBytes);
         if (result < 0) {
-        	LOG_DBG("Syscall read SDU failed: %d", errno);
-                result = -errno;
+                LOG_ERR("Syscall read SDU failed: %d", result);
         }
 
         return result;
@@ -155,8 +150,8 @@ int syscallDestroyIPCProcess(unsigned short ipcProcessId)
 
         result = syscall(SYS_destroyIPCProcess, ipcProcessId);
         if (result < 0) {
-        	LOG_DBG("Syscall destroy IPC Process failed: %d", errno);
-                result = -errno;
+                LOG_ERR("Syscall destroy IPC Process failed: %d",
+                        result);
         }
 
         return result;
@@ -179,16 +174,15 @@ int syscallCreateIPCProcess(const ApplicationProcessNamingInformation & ipcProce
                          difType.c_str());
 
         if (result < 0) {
-        	LOG_DBG("Syscall create IPC Process failed: %d", errno);
-                result = -errno;
+                LOG_ERR("Syscall create IPC Process failed: %d",
+                        result);
         }
 
         return result;
 }
 
 int syscallAllocatePortId(unsigned short ipcProcessId,
-                          const ApplicationProcessNamingInformation & applicationName,
-                          bool blocking)
+                          const ApplicationProcessNamingInformation & applicationName)
 {
         int result;
 
@@ -197,12 +191,10 @@ int syscallAllocatePortId(unsigned short ipcProcessId,
         result = syscall(SYS_allocatePortId,
                          ipcProcessId,
                          applicationName.processName.c_str(),
-                         applicationName.processInstance.c_str(),
-                         blocking);
+                         applicationName.processInstance.c_str());
 
         if (result < 0) {
-        	LOG_DBG("Syscall allocate port id failed: %d", errno);
-                result = -errno;
+                LOG_ERR("Syscall allocate port id failed: %d", result);
         }
 
         return result;
@@ -217,8 +209,8 @@ int syscallDeallocatePortId(unsigned short ipcProcessId, int portId)
         result = syscall(SYS_deallocatePortId, ipcProcessId, portId);
 
         if (result < 0) {
-        	LOG_DBG("Syscall deallocate port id failed: %d", result);
-                result = -errno;
+                LOG_ERR("Syscall deallocate port id failed: %d",
+                        result);
         }
 
         return result;
