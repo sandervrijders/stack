@@ -795,6 +795,14 @@ public:
         const std::string toString();
 };
 
+struct NHopAltList {
+	/** Next hop and its alternates */
+	std::list<unsigned int> alts;
+
+	NHopAltList() { }
+	NHopAltList(unsigned int x) { alts.push_back(x); }
+};
+
 /// Models an entry of the routing table
 class RoutingTableEntry {
 public:
@@ -808,7 +816,7 @@ public:
 	unsigned int cost;
 
 	/** The next hop addresses */
-	std::list<unsigned int> nextHopAddresses;
+	std::list<NHopAltList> nextHopAddresses;
 
 	RoutingTableEntry();
 };
