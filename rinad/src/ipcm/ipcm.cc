@@ -117,7 +117,6 @@ void IPCManager_::init(const std::string& loglevel, std::string& config_file)
 		io_thread = new rina::Thread(&io_thread_attrs,
                                              io_loop_trampoline,
                                              NULL);
-                io_thread->start();
 
 		// Initialize DIF Templates Manager (with its monitor thread)
 		stringstream ss;
