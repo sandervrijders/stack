@@ -164,9 +164,6 @@ int Catalog::load_by_template(Addon *addon, unsigned int ipcp_id,
 	psinfo_from_psconfig(required_policy_sets, "enrollment-task",
 			     t->etConfiguration.policy_set_);
 
-	psinfo_from_psconfig(required_policy_sets, "security-manager",
-			     t->secManConfiguration.policy_set_);
-
 	psinfo_from_psconfig(required_policy_sets, "flow-allocator",
 			     t->faConfiguration.policy_set_);
 
