@@ -44,6 +44,9 @@ LT_INIT
 CPPFLAGS_EXTRA=""
 CXXFLAGS_EXTRA=""
 
+AC_DEFINE_UNQUOTED([PREFIX], [$prefix],
+            [The installation prefix.])
+
 #Set this for TCLAP... we don't support compilers with incomplete std C++ libs
 #so we don't even check it.
 AC_DEFINE([HAVE_SSTREAM], [1], [TCLAP needs this])
