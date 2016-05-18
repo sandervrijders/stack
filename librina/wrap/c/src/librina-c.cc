@@ -21,6 +21,7 @@
  */
 
 #include <string>
+#include <stdlib.h>
 #include <librina/librina.h>
 #include <librina-c/librina-c.h>
 
@@ -35,43 +36,85 @@ struct flow {
         int              port_id;
         FlowRequestEvent fre;
         unsigned int     seq_num;
-        int              oflags;
 };
 
-static bool              initialized = false;
 static int               reg_api_id_counter = 1;
 static int               fd_counter = 1;
 static map <int, string> reg_api;
 static map <int, flow *> flows;
+static string            ap_name = "";
 
-int ap_reg(char * ap_name, char ** difs, size_t difs_size)
+
+int ap_init(char * name)
+{
+        // Sssssssh. Be quiet library.
+        rina::initialize("INFO", "/dev/null");
+
+        ap_name  = string(name);
+
+        return 0;
+}
+
+
+void ap_fini(void)
+{
+        map <int, struct flow *>::iterator it;
+        unsigned int                       seq_num = 0;
+        IPCEvent *			   event = NULL;
+        DeallocateFlowResponseEvent *      resp = NULL;
+
+        for(it = flows.begin(); it != flows.end(); it++) {
+                try {
+                        seq_num = ipcManager->
+                                requestFlowDeallocation(it->second->port_id);
+                } catch (...) {
+                        continue;;
+                }
+
+                event = ipcEventProducer->eventWait();
+                while (event == NULL ||
+                       event->eventType != DEALLOCATE_FLOW_RESPONSE_EVENT ||
+                       event->sequenceNumber != seq_num) {
+                        event = ipcEventProducer->eventWait();
+                }
+
+                resp = dynamic_cast<DeallocateFlowResponseEvent*>(event);
+
+                try {
+                        ipcManager->flowDeallocationResult(it->second->port_id,
+                                                           resp->result == 0);
+                } catch (...) {
+                        continue;
+                }
+                delete it->second;
+        }
+}
+
+int ap_reg(char ** difs, size_t difs_size)
 {
         ApplicationRegistrationInformation ari;
         RegisterApplicationResponseEvent * resp = NULL;
         unsigned int			   seq_num = 0;
         IPCEvent *			   event = NULL;
-        // You can only run a single instance of an AP with the crapper
-        string                             api_id = "0";
+        string                             api_id;
         int                                reg_api_id = 0;
+        stringstream                       ss;
 
-        if (ap_name == NULL || difs == NULL ||
+        if (ap_name == "" || difs == NULL ||
             difs_size == 0 || difs[0] == NULL) {
                 return -1;
         }
 
-        // Sssssssh. Be quiet library.
-        if (initialized == false) {
-                rina::initialize("INFO", "/dev/null");
-                initialized = true;
-        }
+
+        ss << getpid();
+        api_id = ss.str();
 
         // You can only register with 1 DIF (can be any DIF)
         if (difs_size > 1)
                 return -1;
 
         ari.ipcProcessId = 0;
-        ari.appName = ApplicationProcessNamingInformation(string(ap_name),
-                                                          api_id);
+        ari.appName = ApplicationProcessNamingInformation(ap_name, api_id);
         if (string(difs[0]) == "*") {
                 ari.applicationRegistrationType =
                         APPLICATION_REGISTRATION_ANY_DIF;
@@ -85,7 +128,7 @@ int ap_reg(char * ap_name, char ** difs, size_t difs_size)
 
         try {
                 seq_num = ipcManager->requestApplicationRegistration(ari);
-        } catch (IPCException e) {
+        } catch (...) {
                 return -1;
         }
 
@@ -102,39 +145,42 @@ int ap_reg(char * ap_name, char ** difs, size_t difs_size)
                 try {
                         ipcManager->commitPendingRegistration(seq_num,
                                                               resp->DIFName);
-                } catch (IPCException e) {
+                } catch (...) {
                         return -1;
                 }
         } else {
                 try {
                         ipcManager->withdrawPendingRegistration(seq_num);
-                } catch (IPCException e) {
+                } catch (...) {
                         return -1;
                 }
                 return -1;
         }
 
         reg_api_id = reg_api_id_counter++;
-        reg_api.insert(pair<int, string>(reg_api_id, string(ap_name)));
+        reg_api.insert(pair<int, string>(reg_api_id, ap_name));
 
         return reg_api_id;;
 }
 
-int ap_unreg(char * ap_name, char ** difs, size_t difs_size)
+int ap_unreg(char ** difs, size_t difs_size)
 {
         ApplicationProcessNamingInformation  ap;
         ApplicationProcessNamingInformation  dif_name;
         UnregisterApplicationResponseEvent * resp = NULL;
         unsigned int			     seq_num = 0;
         IPCEvent *			     event = NULL;
-        // You can only run a single instance of an AP with the crapper
-        string                               api_id = "0";
+        string                               api_id;
         map <int, string>::iterator          it;
+        stringstream                         ss;
 
-        if (ap_name == NULL || difs == NULL ||
+        if (ap_name == "" || difs == NULL ||
             difs_size == 0 || difs[0] == NULL) {
                 return -1;
         }
+
+        ss << getpid();
+        api_id = ss.str();
 
         // You can only register with 1 DIF (can be any DIF)
         if (difs_size > 1)
@@ -146,8 +192,7 @@ int ap_unreg(char * ap_name, char ** difs, size_t difs_size)
                         reg_api.erase(it);
         }
 
-        ap = ApplicationProcessNamingInformation(string(ap_name),
-                                                 api_id);
+        ap = ApplicationProcessNamingInformation(ap_name, api_id);
         if (string(difs[0]) == "*") {
                 return 0;
         } else {
@@ -159,7 +204,7 @@ int ap_unreg(char * ap_name, char ** difs, size_t difs_size)
                 seq_num =
                         ipcManager->requestApplicationUnregistration(ap,
                                                                      dif_name);
-        } catch (IPCException e) {
+        } catch (...) {
                 return -1;
         }
 
@@ -175,14 +220,14 @@ int ap_unreg(char * ap_name, char ** difs, size_t difs_size)
         try {
                 ipcManager->appUnregistrationResult(seq_num,
                                                     resp->result == 0);
-        } catch (IPCException e) {
+        } catch (...) {
                 return -1;
         }
 
         return 0;
 }
 
-int flow_accept(int fd, char * ap_name, char * ae_name)
+int flow_accept(int fd, char ** ap_name, char ** ae_name)
 {
         FlowInformation            flow;
         IPCEvent *                 event = NULL;
@@ -214,8 +259,12 @@ int flow_accept(int fd, char * ap_name, char * ae_name)
                 for_us = true;
         }
 
-        ap_name = strdup(fre->remoteApplicationName.processName.c_str());
-        ae_name = strdup(fre->remoteApplicationName.entityName.c_str());
+        if (ap_name != NULL)
+                *ap_name =
+                        strdup(fre->remoteApplicationName.processName.c_str());
+        if (ae_name != NULL)
+                *ae_name =
+                        strdup(fre->remoteApplicationName.entityName.c_str());
 
         cli_fd = fd_counter++;
 
@@ -242,16 +291,14 @@ int flow_alloc_resp(int fd, int result)
         try {
                 ipcManager->allocateFlowResponse(mein_flow->fre,
                                                  result, true);
-        } catch (IPCException e) {
+        } catch (...) {
                 return -1;
         }
 
         return 0;
 }
 
-int flow_alloc(char * dst_ap_name, char * src_ap_name,
-               char * src_ae_name, struct qos_spec * qos,
-               int oflags)
+int flow_alloc(char * dst_name, char * src_ae_name, struct qos_spec * qos)
 {
         FlowSpecification                   qos_spec;
         ApplicationProcessNamingInformation src;
@@ -261,15 +308,8 @@ int flow_alloc(char * dst_ap_name, char * src_ap_name,
         ApplicationProcessNamingInformation dif_name;
         string                              api_id = "0";
 
-        if (dst_ap_name == NULL ||
-            src_ap_name == NULL) {
+        if (dst_name == NULL) {
                 return -1;
-        }
-
-        // Sssssssh. Be quiet library.
-        if (initialized == false) {
-                rina::initialize("INFO", "/dev/null");
-                initialized = true;
         }
 
         mein_flow = new struct flow;
@@ -280,12 +320,12 @@ int flow_alloc(char * dst_ap_name, char * src_ap_name,
         }
 
         src = ApplicationProcessNamingInformation();
-        src.processName = string(src_ap_name);
+        src.processName = ap_name;
         if (src_ae_name != NULL)
                 src.entityName = string(src_ae_name);
 
         dst = ApplicationProcessNamingInformation();
-        dst.processName = string(dst_ap_name);
+        dst.processName = string(dst_name);
         dst.processInstance = api_id;
 
         try {
@@ -302,11 +342,10 @@ int flow_alloc(char * dst_ap_name, char * src_ap_name,
                                 ipcManager->requestFlowAllocationInDIF
                                 (src, dst, dif_name, qos_spec);
                 }
-        }  catch (IPCException e) {
+        }  catch (...) {
+                delete mein_flow;
                 return -1;
         }
-
-        mein_flow->oflags = oflags;
 
         fd = fd_counter++;
         flows.insert(pair <int, struct flow *> (fd, mein_flow));
@@ -343,23 +382,23 @@ int flow_alloc_res(int fd)
                 flow = ipcManager->commitPendingFlow(flow_req->sequenceNumber,
                                                      flow_req->portId,
                                                      flow_req->difName);
-        } catch (IPCException e) {
+        } catch (...) {
                 return -1;
         }
 
         mein_flow->port_id = flow.portId;
 
-        return flow_cntl(fd, mein_flow->oflags);
+        return 0;
 }
 
 int flow_dealloc(int fd)
 {
-        DeallocateFlowResponseEvent *        resp = NULL;
-	unsigned int                         seq_num = 0;
-	IPCEvent *                           event = NULL;
-        unsigned int                         port_id = 0;
-        struct flow *                        mein_flow;
-        map <int, struct flow *>::iterator   it;
+        DeallocateFlowResponseEvent *      resp = NULL;
+	unsigned int                       seq_num = 0;
+	IPCEvent *                         event = NULL;
+        unsigned int                       port_id = 0;
+        struct flow *                      mein_flow;
+        map <int, struct flow *>::iterator it;
 
         it = flows.find(fd);
         if (it == flows.end())
@@ -369,11 +408,11 @@ int flow_dealloc(int fd)
 
         mein_flow = it->second;
         port_id = mein_flow->port_id;
-        delete(mein_flow);
+        delete mein_flow;
 
         try {
                 seq_num = ipcManager->requestFlowDeallocation(port_id);
-        } catch (IPCException e) {
+        } catch (...) {
                 return -1;
         }
 
@@ -388,14 +427,14 @@ int flow_dealloc(int fd)
 
         try {
                 ipcManager->flowDeallocationResult(port_id, resp->result == 0);
-        } catch (IPCException e) {
+        } catch (...) {
                 return -1;
         }
 
 	return resp->result;
 }
 
-int flow_cntl(int fd, int oflags)
+int flow_cntl(int fd, int cmd, int oflags)
 {
         unsigned int                       port_id = 0;
         struct flow *                      mein_flow;
@@ -432,7 +471,7 @@ ssize_t flow_write(int fd, void * buf, size_t count)
 
         try {
                 ret = ipcManager->writeSDU(mein_flow->port_id, buf, count);
-        } catch (IPCException e) {
+        } catch (...) {
                 return -1;
         }
 
@@ -458,7 +497,7 @@ ssize_t flow_read(int fd, void * buf, size_t count)
 
         try {
                 ret = ipcManager->readSDU(mein_flow->port_id, buf, count);
-        } catch (IPCException e) {
+        } catch (...) {
                 return -1;
         }
 
