@@ -27,6 +27,7 @@ extern "C"
 #include <stdint.h>
 #include <unistd.h>
 
+#define FLOW_F_SETFL    00000002
 #define FLOW_O_NONBLOCK 00004000
 
 // TODO: Extend QoS spec
