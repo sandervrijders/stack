@@ -38,9 +38,7 @@ struct flow {
         unsigned int     seq_num;
 };
 
-static int               reg_api_id_counter = 1;
 static int               fd_counter = 1;
-static map <int, string> reg_api;
 static map <int, flow *> flows;
 static string            ap_name = "";
 
@@ -97,7 +95,6 @@ int ap_reg(char ** difs, size_t difs_size)
         unsigned int			   seq_num = 0;
         IPCEvent *			   event = NULL;
         string                             api_id;
-        int                                reg_api_id = 0;
         stringstream                       ss;
 
         if (ap_name == "" || difs == NULL ||
@@ -157,10 +154,7 @@ int ap_reg(char ** difs, size_t difs_size)
                 return -1;
         }
 
-        reg_api_id = reg_api_id_counter++;
-        reg_api.insert(pair<int, string>(reg_api_id, ap_name));
-
-        return reg_api_id;;
+        return 0;
 }
 
 int ap_unreg(char ** difs, size_t difs_size)
@@ -185,12 +179,6 @@ int ap_unreg(char ** difs, size_t difs_size)
         // You can only register with 1 DIF (can be any DIF)
         if (difs_size > 1)
                 return -1;
-
-        // Remove it from the crapper map for safety
-        for (it = reg_api.begin(); it != reg_api.end(); ++it) {
-                if (it->second == string(ap_name))
-                        reg_api.erase(it);
-        }
 
         ap = ApplicationProcessNamingInformation(ap_name, api_id);
         if (string(difs[0]) == "*") {
@@ -227,22 +215,15 @@ int ap_unreg(char ** difs, size_t difs_size)
         return 0;
 }
 
-int flow_accept(int fd, char ** ap_name, char ** ae_name)
+int flow_accept(int fd, char ** name, char ** ae_name)
 {
         FlowInformation            flow;
         IPCEvent *                 event = NULL;
         FlowRequestEvent *         fre = NULL;
         map<int, string>::iterator it;
-        string                     src_ap_name;
         bool                       for_us = false;
         int                        cli_fd = 0;
         struct flow *              mein_flow;
-
-        it = reg_api.find(fd);
-        if (it == reg_api.end())
-                return -1;
-
-        src_ap_name = it->second;
 
         // Horrible
         while (for_us != true) {
@@ -253,15 +234,14 @@ int flow_accept(int fd, char ** ap_name, char ** ae_name)
                 }
 
                 fre = dynamic_cast <FlowRequestEvent *> (event);
-                if (fre->localApplicationName.processName != src_ap_name)
+                if (fre->localApplicationName.processName != ap_name)
                         continue;
 
                 for_us = true;
         }
 
-        if (ap_name != NULL)
-                *ap_name =
-                        strdup(fre->remoteApplicationName.processName.c_str());
+        if (name != NULL)
+                *name = strdup(fre->remoteApplicationName.processName.c_str());
         if (ae_name != NULL)
                 *ae_name =
                         strdup(fre->remoteApplicationName.entityName.c_str());
