@@ -22,6 +22,7 @@
 
 #include <string>
 #include <stdlib.h>
+#include <iostream>
 #include <librina/librina.h>
 #include <librina-c/librina-c.h>
 
