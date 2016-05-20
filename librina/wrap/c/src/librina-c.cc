@@ -106,6 +106,9 @@ int ap_reg(char ** difs, size_t difs_size)
         ss << getpid();
         api_id = ss.str();
 
+        cout << "api id is " << api_id << endl;
+        cout << "ap name is " << ap_name << endl;
+
         // You can only register with 1 DIF (can be any DIF)
         if (difs_size > 1)
                 return -1;
@@ -233,9 +236,13 @@ int flow_accept(int fd, char ** name, char ** ae_name)
                         event = ipcEventProducer->eventWait();
                 }
 
+                cout << "New flow alloc req" << endl;
+
                 fre = dynamic_cast <FlowRequestEvent *> (event);
                 if (fre->localApplicationName.processName != ap_name)
                         continue;
+
+                cout << "...and it's for us" << endl;
 
                 for_us = true;
         }
@@ -286,11 +293,17 @@ int flow_alloc(char * dst_name, char * src_ae_name, struct qos_spec * qos)
         int                                 fd = 0;
         struct flow *                       mein_flow;
         ApplicationProcessNamingInformation dif_name;
-        string                              api_id = "0";
+        string                              api_id;
+        stringstream                        ss;
 
         if (dst_name == NULL) {
                 return -1;
         }
+
+        ss << getpid();
+        api_id = ss.str();
+
+        cout << "Allocating a new flow" << endl;
 
         mein_flow = new struct flow;
 
