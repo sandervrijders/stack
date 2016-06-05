@@ -22,7 +22,6 @@
 
 #include <string>
 #include <stdlib.h>
-#include <iostream>
 #include <librina/librina.h>
 #include <librina-c/librina-c.h>
 
@@ -34,7 +33,7 @@ extern "C"
 
 // TODO: Add global lock
 struct flow {
-        int              port_id;
+       int              port_id;
         FlowRequestEvent fre;
         unsigned int     seq_num;
 };
@@ -56,38 +55,7 @@ int ap_init(char * name)
 
 
 void ap_fini(void)
-{
-        map <int, struct flow *>::iterator it;
-        unsigned int                       seq_num = 0;
-        IPCEvent *			   event = NULL;
-        DeallocateFlowResponseEvent *      resp = NULL;
-
-        for(it = flows.begin(); it != flows.end(); it++) {
-                try {
-                        seq_num = ipcManager->
-                                requestFlowDeallocation(it->second->port_id);
-                } catch (...) {
-                        continue;;
-                }
-
-                event = ipcEventProducer->eventWait();
-                while (event == NULL ||
-                       event->eventType != DEALLOCATE_FLOW_RESPONSE_EVENT ||
-                       event->sequenceNumber != seq_num) {
-                        event = ipcEventProducer->eventWait();
-                }
-
-                resp = dynamic_cast<DeallocateFlowResponseEvent*>(event);
-
-                try {
-                        ipcManager->flowDeallocationResult(it->second->port_id,
-                                                           resp->result == 0);
-                } catch (...) {
-                        continue;
-                }
-                delete it->second;
-        }
-}
+{}
 
 int ap_reg(char ** difs, size_t difs_size)
 {
@@ -95,20 +63,13 @@ int ap_reg(char ** difs, size_t difs_size)
         RegisterApplicationResponseEvent * resp = NULL;
         unsigned int			   seq_num = 0;
         IPCEvent *			   event = NULL;
-        string                             api_id;
+        string                             api_id = "0";
         stringstream                       ss;
 
         if (ap_name == "" || difs == NULL ||
             difs_size == 0 || difs[0] == NULL) {
                 return -1;
         }
-
-
-        ss << getpid();
-        api_id = ss.str();
-
-        cout << "api id is " << api_id << endl;
-        cout << "ap name is " << ap_name << endl;
 
         // You can only register with 1 DIF (can be any DIF)
         if (difs_size > 1)
@@ -168,7 +129,7 @@ int ap_unreg(char ** difs, size_t difs_size)
         UnregisterApplicationResponseEvent * resp = NULL;
         unsigned int			     seq_num = 0;
         IPCEvent *			     event = NULL;
-        string                               api_id;
+        string                               api_id = "0";
         map <int, string>::iterator          it;
         stringstream                         ss;
 
@@ -176,9 +137,6 @@ int ap_unreg(char ** difs, size_t difs_size)
             difs_size == 0 || difs[0] == NULL) {
                 return -1;
         }
-
-        ss << getpid();
-        api_id = ss.str();
 
         // You can only register with 1 DIF (can be any DIF)
         if (difs_size > 1)
@@ -237,13 +195,9 @@ int flow_accept(int fd, char ** name, char ** ae_name)
                         event = ipcEventProducer->eventWait();
                 }
 
-                cout << "New flow alloc req" << endl;
-
                 fre = dynamic_cast <FlowRequestEvent *> (event);
                 if (fre->localApplicationName.processName != ap_name)
                         continue;
-
-                cout << "...and it's for us" << endl;
 
                 for_us = true;
         }
@@ -304,8 +258,6 @@ int flow_alloc(char * dst_name, char * src_ae_name, struct qos_spec * qos)
         ss << getpid();
         api_id = ss.str();
 
-        cout << "Allocating a new flow" << endl;
-
         mein_flow = new struct flow;
 
         if (qos != NULL) {
@@ -317,10 +269,11 @@ int flow_alloc(char * dst_name, char * src_ae_name, struct qos_spec * qos)
         src.processName = ap_name;
         if (src_ae_name != NULL)
                 src.entityName = string(src_ae_name);
+        src.processInstance = api_id;
 
         dst = ApplicationProcessNamingInformation();
         dst.processName = string(dst_name);
-        dst.processInstance = api_id;
+        dst.processInstance = "0";
 
         try {
                 if (qos == NULL ||
@@ -387,9 +340,6 @@ int flow_alloc_res(int fd)
 
 int flow_dealloc(int fd)
 {
-        DeallocateFlowResponseEvent *      resp = NULL;
-	unsigned int                       seq_num = 0;
-	IPCEvent *                         event = NULL;
         unsigned int                       port_id = 0;
         struct flow *                      mein_flow;
         map <int, struct flow *>::iterator it;
@@ -405,27 +355,12 @@ int flow_dealloc(int fd)
         delete mein_flow;
 
         try {
-                seq_num = ipcManager->requestFlowDeallocation(port_id);
+                ipcManager->requestFlowDeallocation(port_id);
         } catch (...) {
                 return -1;
         }
 
-        event = ipcEventProducer->eventWait();
-        while (event == NULL ||
-               event->eventType != DEALLOCATE_FLOW_RESPONSE_EVENT ||
-               event->sequenceNumber != seq_num) {
-                event = ipcEventProducer->eventWait();
-        }
-
-	resp = dynamic_cast<DeallocateFlowResponseEvent*>(event);
-
-        try {
-                ipcManager->flowDeallocationResult(port_id, resp->result == 0);
-        } catch (...) {
-                return -1;
-        }
-
-	return resp->result;
+	return 0;
 }
 
 int flow_cntl(int fd, int cmd, int oflags)
