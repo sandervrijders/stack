@@ -982,9 +982,7 @@ static int eth_vlan_sdu_write(struct ipcp_instance_data * data,
         skb_reset_network_header(skb);
 
         name_str = name_tostring_ni(flow->app_name);
-        LOG_INFO("name is %s", name_str);
         name_len = (uint8_t) strlen(name_str);
-        LOG_INFO("Name length is %d", name_len);
 
         sdu_ptr = (unsigned char *) skb_put(skb, name_len + 1);
         memcpy(sdu_ptr, &name_len, 1);
@@ -1256,10 +1254,7 @@ static int eth_vlan_recv_process_packet(struct sk_buff *    skb,
         }
 
         name_len = (uint8_t) sk_data[0];
-        LOG_INFO("Name is %d long", name_len);
-
         name = (uint8_t *) (sk_data + 1);
-        LOG_INFO("Name is %s", name);
 
         app_name = string_toname_ni(name);
 
