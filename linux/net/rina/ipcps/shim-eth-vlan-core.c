@@ -105,6 +105,12 @@ struct shim_eth_flow {
         struct ipcp_instance * user_ipcp;
 };
 
+struct rinarp_list {
+        struct rinarp_handle * handle;
+        struct name * name;
+        struct list_head next;
+};
+
 /*
  * Contains all the information associated to an instance of a
  * shim Ethernet IPC Process
@@ -133,7 +139,7 @@ struct ipcp_instance_data {
         struct kfa *           kfa;
 
         /* RINARP related */
-        struct rinarp_handle * handle;
+        struct list_head       handles;
 
 	/* To handle device notifications. */
 	struct notifier_block ntfy;
@@ -550,6 +556,7 @@ eth_vlan_flow_allocate_request(struct ipcp_instance_data * data,
                                port_id_t                   id)
 {
         struct shim_eth_flow * flow;
+        struct rinarp_list * rinarp;
 
 	if (!data) {
 		LOG_ERR("Bogus data passed, bailing out");
@@ -606,7 +613,11 @@ eth_vlan_flow_allocate_request(struct ipcp_instance_data * data,
                         return -1;
                 }
 
-                if (rinarp_resolve_gpa(data->handle,
+                rinarp = list_first_entry(&data->handles,
+                                          struct rinarp_list,
+                                          next);
+
+                if (rinarp_resolve_gpa(rinarp->handle,
                                        flow->dest_pa,
                                        rinarp_resolve_handler,
                                        data)) {
@@ -760,6 +771,7 @@ static int eth_vlan_application_register(struct ipcp_instance_data * data,
 {
         struct gpa * pa;
         struct gha * ha;
+        struct rinarp_list * rinarp;
 
 	if (!data) {
 		LOG_ERR("Bogus data passed, bailing out");
@@ -771,43 +783,49 @@ static int eth_vlan_application_register(struct ipcp_instance_data * data,
 		return -1;
 	}
 
-        if (data->app_name) {
-                char * tmp = name_tostring(data->app_name);
-                LOG_ERR("Application %s is already registered", tmp);
-                if (tmp) rkfree(tmp);
-                return -1;
-        }
-
-        data->app_name = name_dup(name);
-        if (!data->app_name) {
-                char * tmp = name_tostring(name);
-                LOG_ERR("Application %s registration has failed", tmp);
-                if (tmp) rkfree(tmp);
-                return -1;
-        }
-
         pa = name_to_gpa(name);
         if (!gpa_is_ok(pa)) {
                 LOG_ERR("Failed to create gpa");
-                name_destroy(data->app_name);
                 return -1;
         }
+
         ha = gha_create(MAC_ADDR_802_3, data->dev->dev_addr);
         if (!gha_is_ok(ha)) {
                 LOG_ERR("Failed to create gha");
-                name_destroy(data->app_name);
                 gpa_destroy(pa);
                 return -1;
         }
-        data->handle = rinarp_add(data->dev, pa, ha);
-        if (!data->handle) {
-                LOG_ERR("Failed to register application in ARP");
-                name_destroy(data->app_name);
+
+        rinarp = rkzalloc(sizeof(*rinarp), GFP_KERNEL);
+        if (!rinarp) {
+                LOG_ERR("Failed to create rinarp list");
                 gpa_destroy(pa);
                 gha_destroy(ha);
-
                 return -1;
         }
+
+        rinarp->handle = rinarp_add(data->dev, pa, ha);
+        if (!rinarp->handle) {
+                LOG_ERR("Failed to register application in ARP");
+                rkfree(rinarp);
+                gpa_destroy(pa);
+                gha_destroy(ha);
+                return -1;
+        }
+
+        rinarp->name = name_dup(name);
+        if (!rinarp->name) {
+                LOG_ERR("Failed to dup name");
+                rinarp_remove(rinarp->handle);
+                gpa_destroy(pa);
+                gha_destroy(ha);
+                rkfree(rinarp);
+                return -1;
+        }
+
+        INIT_LIST_HEAD(&rinarp->next);
+        list_add(&rinarp->next, &data->handles);
+
         gpa_destroy(pa);
         gha_destroy(ha);
 
@@ -817,6 +835,8 @@ static int eth_vlan_application_register(struct ipcp_instance_data * data,
 static int eth_vlan_application_unregister(struct ipcp_instance_data * data,
                                            const struct name *         name)
 {
+        struct rinarp_list * entry;
+
       	if (!data) {
 		LOG_ERR("Bogus data passed, bailing out");
 		return -1;
@@ -827,27 +847,16 @@ static int eth_vlan_application_unregister(struct ipcp_instance_data * data,
 		return -1;
 	}
 
-        if (!data->app_name) {
-                LOG_ERR("Shim-eth-vlan has no application registered");
-                return -1;
-        }
-
-        if (!name_is_equal(data->app_name, name)) {
-                LOG_ERR("Application registered != application specified");
-                return -1;
-        }
-
         /* Remove from ARP cache */
-        if (data->handle) {
-                if (rinarp_remove(data->handle)) {
-                        LOG_ERR("Failed to remove the entry from the cache");
-                        return -1;
+        list_for_each_entry(entry, &data->handles, next) {
+                if (name_is_equal(entry->name, name)) {
+                        if (rinarp_remove(entry->handle)) {
+                                LOG_ERR("Failed to remove the entry from the cache");
+                                return -1;
+                        }
                 }
-                data->handle = NULL;
         }
 
-        name_destroy(data->app_name);
-        data->app_name = NULL;
         return 0;
 }
 
@@ -1028,6 +1037,7 @@ static int eth_vlan_rcv_worker(void * o)
         struct rcv_work_data *          wdata;
         struct sk_buff *                skb;
         struct net_device *             dev;
+        struct rinarp_list * rinarp;
 
         LOG_DBG("Worker waking up, going to create a flow");
 
@@ -1086,8 +1096,14 @@ static int eth_vlan_rcv_worker(void * o)
         }
         LOG_DBG("Added flow to the list");
 
+
+        rinarp = list_first_entry(&data->handles,
+                                  struct rinarp_list,
+                                  next);
+
         sname  = NULL;
-        gpaddr = rinarp_find_gpa(data->handle, flow->dest_ha);
+        gpaddr = rinarp_find_gpa(rinarp->handle,
+                                 flow->dest_ha);
         if (gpaddr && gpa_is_ok(gpaddr)) {
                 flow->dest_pa = gpa_dup_gfp(GFP_KERNEL, gpaddr);
                 if (!flow->dest_pa) {
@@ -1880,6 +1896,7 @@ static struct ipcp_instance * eth_vlan_create(struct ipcp_factory_data * data,
         spin_lock_init(&inst->data->lock);
 
         INIT_LIST_HEAD(&(inst->data->flows));
+        INIT_LIST_HEAD(&(inst->data->handles));
 
         /*
          * Bind the shim-instance to the shims set, to keep all our data
@@ -1898,6 +1915,7 @@ static int eth_vlan_destroy(struct ipcp_factory_data * data,
         struct ipcp_instance_data * pos, * next;
         struct shim_eth_flow * flow, * nflow;
         int i;
+        struct rinarp_list * rinarp, * nrinarp;
 
         ASSERT(data);
         ASSERT(instance);
@@ -1936,9 +1954,6 @@ static int eth_vlan_destroy(struct ipcp_factory_data * data,
                         if (pos->dif_name)
                                 name_destroy(pos->dif_name);
 
-                        if (pos->app_name)
-                                name_destroy(pos->app_name);
-
                         if (pos->info->interface_name)
                                 rkfree(pos->info->interface_name);
 
@@ -1948,12 +1963,11 @@ static int eth_vlan_destroy(struct ipcp_factory_data * data,
                         if (pos->fspec)
                                 rkfree(pos->fspec);
 
-                        if (pos->handle) {
-                                if (rinarp_remove(pos->handle)) {
-                                        LOG_ERR("Failed to remove "
-                                                "the entry from the cache");
-                                        return -1;
-                                }
+                        list_for_each_entry_safe(rinarp, nrinarp,
+                                                 &pos->handles, next) {
+                                rinarp_remove(rinarp->handle);
+                                name_destroy(rinarp->name);
+                                list_del(&rinarp->next);
                         }
 
                         mapping = inst_data_mapping_get(pos->dev);
