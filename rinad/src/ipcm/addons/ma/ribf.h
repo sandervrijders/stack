@@ -78,16 +78,16 @@ public:
 	/**
 	* Get the handle of the specific RIB and AE name associated
 	*/
-	static rina::rib::rib_handle_t getRIBHandle(
-						const uint64_t& version,
-						const std::string& AEname);
+	static rina::rib::rib_handle_t getRIBHandle(const uint64_t& version,
+						    const std::string& AEname);
+
+	static rina::rib::rib_handle_t getDefaultRIBHandle();
 
 	//Process IPCP create event to all RIB versions
 	void createIPCPevent(int ipcp_id);
 
 	//Process IPCP create event to all RIB versions
 	void destroyIPCPevent(int ipcp_id);
-
 
 protected:
 	//Mutex
@@ -106,7 +106,8 @@ public:
 	void connect(const rina::cdap::CDAPMessage& message,
 		     const rina::cdap_rib::con_handle_t &con);
 	void connectResult(const rina::cdap_rib::res_info_t &res,
-			   const rina::cdap_rib::con_handle_t &con);
+			   const rina::cdap_rib::con_handle_t &con,
+			   const rina::cdap_rib::auth_policy_t &auth);
 	void release(int message_id, const rina::cdap_rib::con_handle_t &con);
 	void releaseResult(const rina::cdap_rib::res_info_t &res,
 			  const rina::cdap_rib::con_handle_t &con);

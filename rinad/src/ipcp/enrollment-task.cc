@@ -649,13 +649,15 @@ void EnrollmentTask::set_dif_configuration(const rina::DIFConfiguration& dif_con
 	}
 
 	//Start Neighbors Enroller thread
-	rina::ThreadAttributes * threadAttributes = new rina::ThreadAttributes();
-	threadAttributes->setJoinable();
-	neighbors_enroller_ = new rina::Thread(&doNeighborsEnrollerWork,
-					       (void *) ipcp,
-					       threadAttributes);
-	neighbors_enroller_->start();
-	LOG_IPCP_DBG("Started Neighbors enroller thread");
+	if (neigh_enroll_per_ms_ > 0) {
+		rina::ThreadAttributes * threadAttributes = new rina::ThreadAttributes();
+		threadAttributes->setJoinable();
+		neighbors_enroller_ = new rina::Thread(&doNeighborsEnrollerWork,
+						      (void *) ipcp,
+						      threadAttributes);
+		neighbors_enroller_->start();
+		LOG_IPCP_DBG("Started Neighbors enroller thread");
+	}
 
 	//Apply configuration to policy set
 	IPCPEnrollmentTaskPS * ipcp_ps = dynamic_cast<IPCPEnrollmentTaskPS *>(ps);
@@ -795,7 +797,8 @@ void EnrollmentTask::connect(const rina::cdap::CDAPMessage& cdap_m,
 }
 
 void EnrollmentTask::connectResult(const rina::cdap_rib::res_info_t &res,
-				   const rina::cdap_rib::con_handle_t &con_handle)
+				   const rina::cdap_rib::con_handle_t &con_handle,
+				   const rina::cdap_rib::auth_policy_t& auth)
 {
 	LOG_IPCP_DBG("M_CONNECT_R cdapMessage from portId %u",
 		     con_handle.port_id);
@@ -804,7 +807,8 @@ void EnrollmentTask::connectResult(const rina::cdap_rib::res_info_t &res,
 	assert(ipcp_ps);
 	ipcp_ps->connect_response_received(res.code_,
 					   res.reason_,
-					   con_handle);
+					   con_handle,
+					   auth);
 }
 
 void EnrollmentTask::releaseResult(const rina::cdap_rib::res_info_t &res,

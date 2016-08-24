@@ -230,22 +230,21 @@ find_instance(struct ipcp_factory_data * data,
 static struct shim_eth_flow * find_flow(struct ipcp_instance_data * data,
                                         port_id_t                   id)
 {
-        unsigned long          flags;
         struct shim_eth_flow * flow;
 
 	ASSERT(data);
 	ASSERT(is_port_id_ok(id));
 
-        spin_lock_irqsave(&data->lock, flags);
+        spin_lock_bh(&data->lock);
 
         list_for_each_entry(flow, &data->flows, list) {
                 if (flow->port_id == id) {
-                        spin_unlock_irqrestore(&data->lock, flags);
+                        spin_unlock_bh(&data->lock);
                         return flow;
                 }
         }
 
-        spin_unlock_irqrestore(&data->lock, flags);
+        spin_unlock_bh(&data->lock);
 
         return NULL;
 }
@@ -417,7 +416,6 @@ static int eth_vlan_unbind_user_ipcp(struct ipcp_instance_data * data,
                                      port_id_t                   id)
 {
         struct shim_eth_flow * flow;
-        unsigned long          flags;
 
 	if (!data) {
 		LOG_ERR("Bogus data passed, bailing out");
@@ -430,16 +428,17 @@ static int eth_vlan_unbind_user_ipcp(struct ipcp_instance_data * data,
 
         flow = find_flow(data, id);
 
-	spin_lock_irqsave(&data->lock, flags);
+	spin_lock_bh(&data->lock);
 	if (!flow) {
-		spin_unlock_irqrestore(&data->lock, flags);
+		spin_unlock_bh(&data->lock);
+		LOG_WARN("Could not find flow %d", id);
                 return -1;
 	}
 
         if (flow->user_ipcp) {
                 flow->user_ipcp = NULL;
         }
-        spin_unlock_irqrestore(&data->lock, flags);
+        spin_unlock_bh(&data->lock);
 
         return 0;
 }
@@ -452,7 +451,6 @@ static void rinarp_resolve_handler(void *             opaque,
         struct ipcp_instance *      user_ipcp;
         struct ipcp_instance *      ipcp;
         struct shim_eth_flow *      flow;
-        unsigned long 		    irqflags;
 
         LOG_DBG("Entered the ARP resolve handler of the shim-eth");
 
@@ -467,10 +465,10 @@ static void rinarp_resolve_handler(void *             opaque,
                 return;
         }
 
-        spin_lock_irqsave(&data->lock, irqflags);
+        spin_lock_bh(&data->lock);
         if (flow->port_id_state == PORT_STATE_PENDING) {
                 flow->port_id_state = PORT_STATE_ALLOCATED;
-                spin_unlock_irqrestore(&data->lock, irqflags);
+                spin_unlock_bh(&data->lock);
 
                 flow->dest_ha = gha_dup_ni(dest_ha);
 
@@ -526,7 +524,7 @@ static void rinarp_resolve_handler(void *             opaque,
                         return;
                 }
         } else {
-        	spin_unlock_irqrestore(&data->lock, irqflags);
+        	spin_unlock_bh(&data->lock);
         }
 }
 
@@ -843,17 +841,16 @@ static int eth_vlan_application_unregister(struct ipcp_instance_data * data,
 static void enable_all_port_ids(struct ipcp_instance_data * data)
 {
 	struct shim_eth_flow 	  * flow;
-	unsigned long               flags;
 
 	ASSERT(data);
 
-	spin_lock_irqsave(&data->lock, flags);
+	spin_lock_bh(&data->lock);
 	list_for_each_entry(flow, &data->flows, list) {
 		if (flow->user_ipcp && flow->user_ipcp->ops)
 			flow->user_ipcp->ops->enable_write(flow->user_ipcp->data,
 							   flow->port_id);
 	}
-	spin_unlock_irqrestore(&data->lock, flags);
+	spin_unlock_bh(&data->lock);
 }
 
 void enable_write_all(struct net_device * dev)
@@ -897,7 +894,6 @@ static int eth_vlan_sdu_write(struct ipcp_instance_data * data,
         unsigned char *          sdu_ptr;
         int                      hlen, tlen, length;
         int                      retval;
-        unsigned long            flags;
 
 
         LOG_DBG("Entered the sdu-write");
@@ -935,14 +931,14 @@ static int eth_vlan_sdu_write(struct ipcp_instance_data * data,
                 return -1;
         }
 
-        spin_lock_irqsave(&data->lock, flags);
+        spin_lock_bh(&data->lock);
         if (flow->port_id_state != PORT_STATE_ALLOCATED) {
                 LOG_ERR("Flow is not in the right state to call this");
                 sdu_destroy(sdu);
-                spin_unlock_irqrestore(&data->lock, flags);
+                spin_unlock_bh(&data->lock);
                 return -1;
         }
-        spin_unlock_irqrestore(&data->lock, flags);
+        spin_unlock_bh(&data->lock);
 
         src_hw = data->dev->dev_addr;
         if (!src_hw) {
@@ -1305,6 +1301,13 @@ static int eth_vlan_recv_process_packet(struct sk_buff *    skb,
                 gha_destroy(ghaddr);
                 LOG_DBG("Flow exists, queueing or delivering or dropping");
                 if (flow->port_id_state == PORT_STATE_ALLOCATED) {
+                        if (!flow->user_ipcp) {
+                        	spin_unlock(&data->lock);
+                        	LOG_ERR("Flow is being deallocated, dropping PDU");
+                                sdu_destroy(du);
+                                return -1;
+                        }
+
                         spin_unlock(&data->lock);
 
                         ASSERT(flow->user_ipcp->ops);
@@ -1314,6 +1317,7 @@ static int eth_vlan_recv_process_packet(struct sk_buff *    skb,
                                         flow->port_id,
                                         du)) {
                                 LOG_ERR("Couldn't enqueue SDU to user IPCP");
+                                sdu_destroy(du);
                                 return -1;
                         }
 

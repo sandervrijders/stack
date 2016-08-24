@@ -39,19 +39,23 @@ void IPCPSecurityManager::set_application_process(rina::ApplicationProcess * ap)
 		LOG_IPCP_ERR("Bogus instance of IPCP passed, return");
 		return;
 	}
+
+	ipcp->rib_daemon_->set_security_manager(this);
 }
 
 void IPCPSecurityManager::set_dif_configuration(const rina::DIFConfiguration& dif_configuration)
 {
 	config = dif_configuration.sm_configuration_;
 
-	// If no policy set is specified, use default
+        // If no policy set is specified, use default
 	if (config.policy_set_.name_ == std::string()) {
+                LOG_DBG("IPCPSecurityManager: No policy Set specified, use default");
 		config.policy_set_.name_ = rina::IPolicySet::DEFAULT_PS_SET_NAME;
 	}
 
 	// If no default authentication policy is specified, use AUTH_NONE
 	if (config.default_auth_profile.authPolicy.name_ == std::string()) {
+                LOG_DBG("IPCPSecurityManager: No Auth policy Set specified, use AUTH-NONE");
 		config.default_auth_profile.authPolicy.name_ = rina::IAuthPolicySet::AUTH_NONE;
 		config.default_auth_profile.authPolicy.version_ = RINA_DEFAULT_POLICY_VERSION;
 	}
@@ -61,9 +65,14 @@ void IPCPSecurityManager::set_dif_configuration(const rina::DIFConfiguration& di
 		throw rina::Exception("Cannot create Security Manager policy-set");
 	}
 
-        add_auth_policy_set(rina::IAuthPolicySet::AUTH_NONE);
-        add_auth_policy_set(rina::IAuthPolicySet::AUTH_PASSWORD);
-        add_auth_policy_set(rina::IAuthPolicySet::AUTH_SSH2);
+	//Add the auth policy sets supported by the DIF configuration
+        add_auth_policy_set(config.default_auth_profile.authPolicy.name_);
+        std::map<std::string, rina::AuthSDUProtectionProfile>::const_iterator iterator;
+        for (iterator = config.specific_auth_profiles.begin();
+        		iterator != config.specific_auth_profiles.end();
+        		++iterator) {
+        	add_auth_policy_set(iterator->second.authPolicy.name_);
+        }
 }
 
 IPCPSecurityManager::~IPCPSecurityManager()
@@ -73,6 +82,7 @@ IPCPSecurityManager::~IPCPSecurityManager()
 
 rina::AuthSDUProtectionProfile IPCPSecurityManager::get_auth_sdup_profile(const std::string& under_dif_name)
 {
+        LOG_DBG("IPCPSecurityManager: update crypto state (under-dif-name %s)", under_dif_name.c_str());
 	std::map<std::string, rina::AuthSDUProtectionProfile>::const_iterator it =
 			config.specific_auth_profiles.find(under_dif_name);
 	if (it == config.specific_auth_profiles.end()) {
@@ -107,7 +117,7 @@ void IPCPSecurityManager::process_update_crypto_state_response(const rina::Updat
 
 	lock.lock();
 
-	std::map<unsigned int, rina::IAuthPolicySet *>::iterator it =
+        std::map<unsigned int, rina::IAuthPolicySet *>::iterator it =
 			pending_update_crypto_state_requests.find(event.sequenceNumber);
 	if (it == pending_update_crypto_state_requests.end()) {
 		lock.unlock();

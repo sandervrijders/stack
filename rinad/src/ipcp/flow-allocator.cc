@@ -83,7 +83,7 @@ void FlowRIBObject::create_cb(const rina::rib::rib_handle_t rib,
 			      const rina::cdap_rib::filt_info_t &filt,
 			      const int invoke_id,
 			      const rina::ser_obj_t &obj_req,
-			      rina::ser_obj_t &obj_reply,
+			      rina::cdap_rib::obj_info_t &obj_reply,
 			      rina::cdap_rib::res_info_t& res)
 {
 	encoders::FlowEncoder encoder;
@@ -731,8 +731,8 @@ void FlowAllocatorInstance::createFlowRequestMessageReceived(configs::Flow * flo
 							     const std::string& object_name,
 							     int invoke_id)
 {
-	ISecurityManagerPs *smps =
-		dynamic_cast<ISecurityManagerPs *>(security_manager_->ps);
+	IPCPSecurityManagerPs *smps =
+		dynamic_cast<IPCPSecurityManagerPs *>(security_manager_->ps);
 
 	assert(smps);
 

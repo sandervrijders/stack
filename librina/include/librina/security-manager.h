@@ -56,6 +56,7 @@ public:
 	static const std::string AUTH_NONE;
 	static const std::string AUTH_PASSWORD;
 	static const std::string AUTH_SSH2;
+	static const std::string AUTH_TLSHAND;
 
 	IAuthPolicySet(const std::string& type_);
 	virtual ~IAuthPolicySet() { };
@@ -83,6 +84,33 @@ public:
 
 	// The type of authentication policy
 	std::string type;
+};
+
+/// MAIN security manager PS, mainly dealing with access control policies
+/// for the DAF (joining the DAF) and the DAP's RIB.
+class ISecurityManagerPs : public IPolicySet {
+// This class is used by the IPCP to access the plugin functionalities
+public:
+	/// Decide if an IPC Process is allowed to join a DIF.
+	/// 0 success, < 0 error
+	virtual int isAllowedToJoinDAF(const cdap_rib::con_handle_t & con,
+				       const Neighbor& newMember,
+				       cdap_rib::auth_policy_t & auth) = 0;
+
+	//Validate and store access control credentials.0 success, < 0 error.
+	virtual int storeAccessControlCreds(const cdap_rib::auth_policy_t & auth,
+					    const cdap_rib::con_handle_t & con) = 0;
+
+	virtual int getAccessControlCreds(cdap_rib::auth_policy_t & auth,
+					  const cdap_rib::con_handle_t & con) = 0;
+
+	virtual void checkRIBOperation(const cdap_rib::auth_policy_t & auth,
+				       const cdap_rib::con_handle_t & con,
+				       const cdap::cdap_m_t::Opcode opcode,
+				       const std::string obj_name,
+				       cdap_rib::res_info_t& res) = 0;
+
+        virtual ~ISecurityManagerPs() {}
 };
 
 class ISecurityManager;
@@ -212,6 +240,9 @@ public:
 			enable_crypto_rx(false){ };
 
 	int port_id;
+	std::string mac_alg;
+	std::string encrypt_alg;
+	std::string compress_alg;
 	bool enable_crypto_tx;
 	bool enable_crypto_rx;
 	UcharArray encrypt_key_tx;
@@ -238,7 +269,8 @@ public:
 			    SSH2AuthOptions * options);
 	~SSH2SecurityContext();
 	CryptoState get_crypto_state(bool enable_crypto_tx,
-				     bool enable_crypto_rx);
+				     bool enable_crypto_rx,
+				     bool isserver);
 
 	static const std::string KEY_EXCHANGE_ALGORITHM;
 	static const std::string ENCRYPTION_ALGORITHM;
@@ -286,8 +318,13 @@ public:
 	///The shared secret, used to generate the encryption key
 	UcharArray shared_secret;
 
-	///The encryption key
-	UcharArray encrypt_key;
+	///The encryption keys
+	UcharArray encrypt_key_client;
+	UcharArray encrypt_key_server;
+
+	///The hmac keys
+	UcharArray mac_key_client;
+	UcharArray mac_key_server;
 
 	/// My RSA * key pair (used for authentication)
 	RSA * auth_keypair;

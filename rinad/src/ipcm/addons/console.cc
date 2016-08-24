@@ -20,7 +20,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
  * MA  02110-1301  USA
  */
-
+#include <sys/time.h>
 #include <cstdlib>
 #include <cstddef>
 #include <iostream>
@@ -152,10 +152,12 @@ IPCMConsole::IPCMConsole(const std::string& socket_path_) :
 	commands_map["show-catalog"] =
 			ConsoleCmdInfo(&IPCMConsole::show_catalog,
 				"USAGE: show-catalog [<component-name>]");
-
 	commands_map["update-catalog"] =
 			ConsoleCmdInfo(&IPCMConsole::update_catalog,
 				"USAGE: update-catalog");
+	commands_map["query-ma-rib"] =
+			ConsoleCmdInfo(&IPCMConsole::query_ma_rib,
+				"USAGE: query_ma_rib");
 
 	keep_on_running = true;
 	rina::ThreadAttributes ta;
@@ -702,10 +704,19 @@ IPCMConsole::update_dif_config(std::vector<std::string>& args)
 	return CMDRETCONT;
 }
 
+int getTimeMs(){
+    timeval time_;
+    gettimeofday(&time_, 0);
+    int time_seconds = (int) time_.tv_sec;
+    return (int) time_seconds * 1000 + (int) (time_.tv_usec / 1000);   
+}
+
 int
 IPCMConsole::enroll_to_dif(std::vector<std::string>& args)
 {
-	NeighborData neighbor_data;
+	
+        int t0 = getTimeMs();
+        NeighborData neighbor_data;
 	int ipcp_id;
 	Promise promise;
 
@@ -736,8 +747,8 @@ IPCMConsole::enroll_to_dif(std::vector<std::string>& args)
 		outstream << "Enrollment operation failed" << endl;
 		return CMDRETCONT;
 	}
-
-	outstream << "DIF enrollment succesfully completed" << endl;
+        int t1 = getTimeMs();
+	outstream << "DIF enrollment succesfully completed in " << t1 - t0 << " ms" << endl;
 
 	return CMDRETCONT;
 }
@@ -960,6 +971,18 @@ int IPCMConsole::show_catalog(std::vector<std::string>& args)
 		outstream << commands_map[args[0]].usage << endl;
 		break;
 	}
+
+	return CMDRETCONT;
+}
+
+int IPCMConsole::query_ma_rib(std::vector<std::string>& args)
+{
+	if (args.size() != 1) {
+		outstream << commands_map[args[0]].usage << endl;
+		return CMDRETCONT;
+	}
+
+	outstream << IPCManager->query_ma_rib();
 
 	return CMDRETCONT;
 }
