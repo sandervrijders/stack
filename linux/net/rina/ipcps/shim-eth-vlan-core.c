@@ -95,6 +95,7 @@ struct shim_eth_flow {
         struct gha *           dest_ha;
         struct gpa *           dest_pa;
         __be16                 ethertype;
+        struct name *          app_name;
 
         /* Only used once for allocate_response */
         port_id_t              port_id;
@@ -127,9 +128,6 @@ struct ipcp_instance_data {
         struct net_device *    dev;
         struct net_device *    phy_dev;
         struct flow_spec *     fspec;
-
-        /* The IPC Process using the shim-eth-vlan */
-        struct name *          app_name;
 
         /* Stores the state of flows indexed by port_id */
         spinlock_t             lock;
@@ -578,12 +576,6 @@ eth_vlan_flow_allocate_request(struct ipcp_instance_data * data,
 		return -1;
 	}
 
-
-        if (!data->app_name || !name_is_equal(source, data->app_name)) {
-                LOG_ERR("Wrong request, app is not registered");
-                return -1;
-        }
-
         flow = find_flow(data, id);
         if (!flow) {
                 flow = rkzalloc(sizeof(*flow), GFP_KERNEL);
@@ -594,6 +586,7 @@ eth_vlan_flow_allocate_request(struct ipcp_instance_data * data,
                 flow->port_id_state = PORT_STATE_PENDING;
                 flow->user_ipcp     = user_ipcp;
                 flow->dest_pa       = name_to_gpa(dest);
+                flow->app_name      = name_dup(dest);
 
                 if (!gpa_is_ok(flow->dest_pa)) {
                         LOG_ERR("Destination protocol address is not ok");
@@ -916,6 +909,8 @@ static int eth_vlan_sdu_write(struct ipcp_instance_data * data,
         unsigned char *          sdu_ptr;
         int                      hlen, tlen, length;
         int                      retval;
+        uint8_t * name_str;
+        uint8_t name_len;
 
 
         LOG_DBG("Entered the sdu-write");
@@ -985,6 +980,16 @@ static int eth_vlan_sdu_write(struct ipcp_instance_data * data,
 
         skb_reserve(skb, hlen);
         skb_reset_network_header(skb);
+
+        name_str = name_tostring_ni(flow->app_name);
+        LOG_INFO("name is %s", name_str);
+        name_len = (uint8_t) strlen(name_str);
+        LOG_INFO("Name length is %d", name_len);
+
+        sdu_ptr = (unsigned char *) skb_put(skb, name_len + 1);
+        memcpy(sdu_ptr, &name_len, 1);
+        memcpy(sdu_ptr + 1, name_str, name_len);
+
         sdu_ptr = (unsigned char *) skb_put(skb, buffer_length(sdu->buffer));
 
         if (!memcpy(sdu_ptr,
@@ -1051,14 +1056,8 @@ static int eth_vlan_rcv_worker(void * o)
         data   = wdata->data;
         rkfree(wdata);
 
-        if (!data->app_name) {
-                LOG_ERR("No app registered yet! Someone is doing something bad on the network");
-                kfree_skb(skb);
-                return -1;
-        }
-
         user_ipcp = kipcm_find_ipcp_by_name(default_kipcm,
-                                                    data->app_name);
+                                            flow->app_name);
         if (!user_ipcp)
                 user_ipcp = kfa_ipcp_instance(data->kfa);
 
@@ -1149,7 +1148,7 @@ static int eth_vlan_rcv_worker(void * o)
                                flow->port_id,
                                data->dif_name,
                                sname,
-                               data->app_name,
+                               flow->app_name,
                                data->fspec)) {
                 LOG_ERR("Couldn't tell the KIPCM about the flow");
                 kfa_port_id_release(data->kfa, flow->port_id);
@@ -1180,6 +1179,10 @@ static int eth_vlan_recv_process_packet(struct sk_buff *    skb,
         struct rcv_work_data          * wdata;
         struct rwq_work_item          * item;
 
+        uint8_t name_len;
+        uint8_t * name;
+        struct name * app_name;
+
         /* C-c-c-checks */
 	if (!skb) {
 		LOG_ERR("Bogus skb passed, bailing out");
@@ -1200,12 +1203,6 @@ static int eth_vlan_recv_process_packet(struct sk_buff *    skb,
 
         data = mapping->data;
         if (!data) {
-                kfree_skb(skb);
-                return -1;
-        }
-
-        if (!data->app_name) {
-                LOG_ERR("No app registered yet! Someone is doing something bad on the network");
                 kfree_skb(skb);
                 return -1;
         }
@@ -1258,7 +1255,16 @@ static int eth_vlan_recv_process_packet(struct sk_buff *    skb,
                 return -1;
         }
 
-        buffer = buffer_create_with_ni(sk_data, skb->len);
+        name_len = (uint8_t) sk_data[0];
+        LOG_INFO("Name is %d long", name_len);
+
+        name = (uint8_t *) (sk_data + 1);
+        LOG_INFO("Name is %s", name);
+
+        app_name = string_toname_ni(name);
+
+        buffer = buffer_create_with_ni(sk_data + name_len + 1,
+                                       skb->len - name_len - 1);
         if (!buffer) {
                 rkfree(sk_data);
                 gha_destroy(ghaddr);
@@ -1292,6 +1298,7 @@ static int eth_vlan_recv_process_packet(struct sk_buff *    skb,
                 flow->port_id_state = PORT_STATE_PENDING;
                 flow->dest_ha       = ghaddr;
                 flow->ethertype     = ethertype;
+                flow->app_name      = app_name;
                 INIT_LIST_HEAD(&flow->list);
                 flow->sdu_queue = rfifo_create_ni();
                 if (!flow->sdu_queue) {
